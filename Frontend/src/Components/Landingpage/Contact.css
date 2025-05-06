@@ -1,0 +1,20 @@
+.sliding-bar {
+    position: relative;
+    background: transparent;
+  }
+  
+  .sliding-bar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 0%;
+    height: 2px;
+    background: #3b82f6; 
+    transition: width 0.4s ease-in-out;
+  }
+  
+  .sliding-bar:focus::after {
+    width: 100%;
+  }
+  
