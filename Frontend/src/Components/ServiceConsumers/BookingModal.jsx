@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FaCalendarAlt, FaHourglass, FaSpinner, FaRegStickyNote, FaTimes, FaUtensils } from 'react-icons/fa';
+import React, { useState, useEffect } from 'react';
+import { FaCalendarAlt, FaHourglass, FaSpinner, FaRegStickyNote, FaTimes, FaUtensils, FaDumbbell } from 'react-icons/fa';
 import { createBookingRequest } from '../../utils/api';
 import { toast } from 'react-toastify';
 
@@ -11,6 +11,20 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Debug log for gym membership plans
+  useEffect(() => {
+    if (serviceType === 'gym') {
+      console.log("BookingModal - Gym service details:", {
+        plans: service.membershipPlans,
+        selectedPlan: service.selectedPlan,
+        hasPlanPrice: service.membershipPlans && 
+          service.selectedPlan !== undefined && 
+          service.membershipPlans[service.selectedPlan] && 
+          service.membershipPlans[service.selectedPlan].price
+      });
+    }
+  }, [service, serviceType]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -45,6 +59,42 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
     } else if (serviceType === 'mess') {
       bookingData.bookingDetails.startDate = new Date().toISOString();
       bookingData.bookingDetails.duration = formData.duration;
+    } else if (serviceType === 'gym') {
+      bookingData.bookingDetails.startDate = new Date().toISOString();
+      bookingData.bookingDetails.duration = formData.duration;
+      
+      // If a membership plan was selected, add it
+      if (service.membershipPlans && service.membershipPlans.length > 0) {
+        // If a plan is selected, use that
+        if (service.selectedPlan !== undefined && service.membershipPlans[service.selectedPlan]) {
+          const selectedPlan = service.membershipPlans[service.selectedPlan];
+          bookingData.bookingDetails.planName = selectedPlan.name;
+          bookingData.bookingDetails.planPrice = selectedPlan.price || 600; // Use default 600 if price not set
+          bookingData.bookingDetails.selectedPlan = service.selectedPlan;
+          
+          console.log(`Using gym plan price: ${selectedPlan.price || 600} for plan: ${selectedPlan.name}`);
+        } else if (service.planName && service.planPrice) {
+          // Use the plan details passed directly (from GymDetail)
+          bookingData.bookingDetails.planName = service.planName;
+          bookingData.bookingDetails.planPrice = service.planPrice || 600;
+          bookingData.bookingDetails.selectedPlan = service.selectedPlan;
+          
+          console.log(`Using explicit plan price: ${service.planPrice || 600} for plan: ${service.planName}`);
+        } else {
+          // Default to first plan
+          const defaultPlan = service.membershipPlans[0];
+          bookingData.bookingDetails.planName = defaultPlan.name;
+          bookingData.bookingDetails.planPrice = defaultPlan.price || 600;
+          bookingData.bookingDetails.selectedPlan = 0;
+          
+          console.log(`Using default plan price: ${defaultPlan.price || 600} for plan: ${defaultPlan.name}`);
+        }
+      } else {
+        // If no plans are available, use a default
+        bookingData.bookingDetails.planName = "Basic Plan";
+        bookingData.bookingDetails.planPrice = 600; // Default price from provided document
+        console.log("Using default plan price of 600 from documentation");
+      }
     }
 
     try {
@@ -59,6 +109,8 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
         toast.success('Booking request sent successfully!');
       } else if (serviceType === 'mess') {
         toast.success('Subscription request sent successfully!');
+      } else if (serviceType === 'gym') {
+        toast.success('Gym membership request sent successfully!');
       }
       
       // Close modal and refresh data
@@ -71,6 +123,8 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
       console.error('Error creating booking:', error);
       const errorMessage = serviceType === 'mess' 
         ? 'Failed to create subscription request' 
+        : serviceType === 'gym'
+        ? 'Failed to create gym membership request'
         : 'Failed to create booking request';
       setError(error.response?.data?.error || errorMessage);
     } finally {
@@ -90,6 +144,8 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
       return service.roomName || 'Room';
     } else if (serviceType === 'mess') {
       return service.messName || 'Mess';
+    } else if (serviceType === 'gym') {
+      return service.gymName || 'Gym';
     }
     return service.title || 'Service';
   };
@@ -100,8 +156,146 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
       return `Book ${getServiceName()}`;
     } else if (serviceType === 'mess') {
       return `Subscribe to ${getServiceName()}`;
+    } else if (serviceType === 'gym') {
+      return `${getServiceName()} Membership`;
     }
     return `Book ${getServiceName()}`;
+  };
+
+  // Get appropriate icon based on service type
+  const getServiceIcon = () => {
+    switch (serviceType) {
+      case 'mess':
+        return <FaUtensils className="mr-2 text-green-600" />;
+      case 'gym':
+        return <FaDumbbell className="mr-2 text-green-600" />;
+      default:
+        return <FaHourglass className="mr-2 text-green-600" />;
+    }
+  };
+
+  // Get form field configurations based on service type
+  const getFormConfig = () => {
+    // Common form fields for all services
+    const commonFields = [];
+    
+    // Additional fields by service type
+    if (serviceType === 'hostel') {
+      return [
+        ...commonFields,
+        {
+          id: 'checkInDate',
+          label: 'Check-in Date',
+          type: 'date',
+          placeholder: 'Select your check-in date',
+          required: true,
+          className: 'w-full',
+          value: formData.checkInDate,
+          min: getMinDate()
+        },
+        {
+          id: 'duration',
+          label: 'Duration (months)',
+          type: 'number',
+          placeholder: 'How many months?',
+          required: true,
+          className: 'w-full',
+          value: formData.duration,
+          min: 1,
+          max: 12
+        }
+      ];
+    } else if (serviceType === 'mess') {
+      return [
+        ...commonFields,
+        {
+          id: 'duration',
+          label: 'Duration (months)',
+          type: 'number',
+          placeholder: 'How many months?',
+          required: true,
+          className: 'w-full',
+          value: formData.duration,
+          min: 1,
+          max: 12
+        }
+      ];
+    } else if (serviceType === 'gym') {
+      // For gym, use the selected plan's duration type
+      let selectedPlan = null;
+      let planPrice = 600; // Default price from the provided document
+      
+      if (service.selectedPlan !== undefined && service.membershipPlans && service.membershipPlans.length > 0) {
+        selectedPlan = service.membershipPlans[service.selectedPlan];
+        if (selectedPlan && selectedPlan.price) {
+          planPrice = selectedPlan.price;
+        }
+      }
+      
+      return [
+        ...commonFields,
+        {
+          id: 'planName',
+          label: 'Membership Plan',
+          type: 'text',
+          readOnly: true,
+          value: selectedPlan ? selectedPlan.name : 'Basic Plan',
+          className: 'w-full bg-gray-100'
+        },
+        {
+          id: 'planPrice',
+          label: 'Price',
+          type: 'text',
+          readOnly: true,
+          value: `₹${planPrice}`,
+          className: 'w-full bg-gray-100'
+        },
+        {
+          id: 'duration',
+          label: 'Duration',
+          type: 'text',
+          readOnly: true,
+          value: selectedPlan ? formatDuration(selectedPlan.duration) : 'Monthly',
+          className: 'w-full bg-gray-100'
+        }
+      ];
+    }
+    
+    // Default fields
+    return [
+      ...commonFields,
+      {
+        id: 'duration',
+        label: 'Duration (months)',
+        type: 'number',
+        placeholder: 'How many months?',
+        required: true,
+        className: 'w-full',
+        value: formData.duration,
+        min: 1,
+        max: 12
+      }
+    ];
+  };
+  
+  // Format duration for display
+  const formatDuration = (duration) => {
+    if (!duration) return '1 Month';
+    
+    switch(duration) {
+      case 'daily': return '1 Day';
+      case 'weekly': return '1 Week';
+      case 'monthly': return '1 Month';
+      case 'quarterly': return '3 Months';
+      case 'halfYearly': return '6 Months';
+      case 'yearly': return '1 Year';
+      default: 
+        // If it's already a formatted string, return as is
+        if (typeof duration === 'string' && duration.includes(' ')) {
+          return duration;
+        }
+        return `${duration} Month${duration > 1 ? 's' : ''}`;
+    }
   };
 
   return (
@@ -115,7 +309,7 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
           <FaTimes />
         </button>
         
-        <h2 className={`text-xl font-bold mb-4 ${serviceType === 'mess' ? 'text-green-600' : 'text-green-600'}`}>
+        <h2 className={`text-xl font-bold mb-4 ${serviceType === 'mess' || serviceType === 'gym' ? 'text-green-600' : 'text-green-600'}`}>
           {getModalTitle()}
         </h2>
         
@@ -148,12 +342,10 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
           {/* Duration */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-              {serviceType === 'mess' ? (
-                <FaUtensils className="mr-2 text-green-600" />
-              ) : (
-                <FaHourglass className="mr-2 text-green-600" />
-              )}
-              Subscription Duration
+              {getServiceIcon()}
+              {serviceType === 'gym' ? 'Membership Duration' : 
+               serviceType === 'mess' ? 'Subscription Duration' : 
+               'Duration'}
             </label>
             <select
               name="duration"
@@ -172,7 +364,9 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
               <FaRegStickyNote className="mr-2 text-green-600" />
-              {serviceType === 'mess' ? 'Special Diet Requirements (optional)' : 'Additional Requirements (optional)'}
+              {serviceType === 'mess' ? 'Special Diet Requirements (optional)' : 
+               serviceType === 'gym' ? 'Fitness Goals (optional)' : 
+               'Additional Requirements (optional)'}
             </label>
             <textarea
               name="additionalRequirements"
@@ -180,7 +374,11 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
               onChange={handleChange}
               rows="3"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder={serviceType === 'mess' ? 'Any diet restrictions or preferences...' : 'Any special requests or requirements...'}
+              placeholder={
+                serviceType === 'mess' ? 'Any diet restrictions or preferences...' : 
+                serviceType === 'gym' ? 'Your fitness goals or specific requirements...' :
+                'Any special requests or requirements...'
+              }
             ></textarea>
           </div>
           
@@ -196,7 +394,7 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
             <button
               type="submit"
               disabled={loading}
-              className={`px-4 py-2 text-white rounded-md flex items-center ${serviceType === 'mess' ? 'bg-green-600 hover:bg-green-700' : 'bg-green-600 hover:bg-green-700'}`}
+              className={`px-4 py-2 text-white rounded-md flex items-center bg-green-600 hover:bg-green-700`}
             >
               {loading ? (
                 <>
@@ -204,7 +402,9 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
                   Sending...
                 </>
               ) : (
-                serviceType === 'mess' ? 'Subscribe Now' : 'Send Request'
+                serviceType === 'mess' ? 'Subscribe Now' : 
+                serviceType === 'gym' ? 'Send Request' : 
+                'Send Request'
               )}
             </button>
           </div>

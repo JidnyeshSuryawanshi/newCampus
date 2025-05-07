@@ -1,6 +1,7 @@
 const Booking = require('../Models/booking');
 const HostelRoom = require('../Models/hostelRoom');
 const Mess = require('../Models/mess');
+const Gym = require('../Models/gym');
 const User = require('../Models/user');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
@@ -24,8 +25,7 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
     } else if (serviceType === 'mess') {
       serviceModel = Mess;
     } else if (serviceType === 'gym') {
-      // Add gym model when implemented
-      return next(new ErrorResponse('Gym bookings are not implemented yet', 400));
+      serviceModel = Gym;
     } else {
       return next(new ErrorResponse('Invalid service type', 400));
     }
@@ -138,7 +138,24 @@ exports.getBookings = asyncHandler(async (req, res, next) => {
           console.error(`Error fetching mess details: ${err.message}`);
         }
       }
-      // Add other service types when implemented (gym)
+      else if (booking.serviceType === 'gym') {
+        try {
+          const gym = await Gym.findById(booking.serviceId);
+          if (gym) {
+            bookingObj.serviceDetails = {
+              gymName: gym.gymName,
+              gymType: gym.gymType,
+              address: gym.address,
+              capacity: gym.capacity,
+              openingHours: gym.openingHours,
+              images: gym.images,
+              membershipPlans: gym.membershipPlans
+            };
+          }
+        } catch (err) {
+          console.error(`Error fetching gym details: ${err.message}`);
+        }
+      }
       
       populatedBookings.push(bookingObj);
     }
@@ -220,7 +237,24 @@ exports.getBooking = asyncHandler(async (req, res, next) => {
         console.error(`Error fetching mess details: ${err.message}`);
       }
     }
-    // Add other service types when implemented (gym)
+    else if (booking.serviceType === 'gym') {
+      try {
+        const gym = await Gym.findById(booking.serviceId);
+        if (gym) {
+          bookingObj.serviceDetails = {
+            gymName: gym.gymName,
+            gymType: gym.gymType,
+            address: gym.address,
+            capacity: gym.capacity,
+            openingHours: gym.openingHours,
+            images: gym.images,
+            membershipPlans: gym.membershipPlans
+          };
+        }
+      } catch (err) {
+        console.error(`Error fetching gym details: ${err.message}`);
+      }
+    }
 
     res.status(200).json({
       success: true,

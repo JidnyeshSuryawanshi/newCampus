@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Stats from '../dashboard/Stats';
 import ActivityList from '../dashboard/ActivityList';
 import { useNavigate } from 'react-router-dom';
-import { FaSpinner, FaUtensils, FaBuilding } from 'react-icons/fa';
-import { getRevenueStats, getBookings, fetchUserProfile } from '../../utils/api';
+import { FaSpinner, FaUtensils, FaBuilding, FaDumbbell, FaExclamationCircle } from 'react-icons/fa';
+import { getRevenueStats, getBookings, fetchUserProfile, getAcceptedBookings } from '../../utils/api';
 
 export default function OwnerDashboard() {
   const navigate = useNavigate();
@@ -24,26 +24,42 @@ export default function OwnerDashboard() {
         setUserType(userTypeFromProfile);
         
         const isMessOwner = userTypeFromProfile.includes('messOwner');
-        const serviceType = isMessOwner ? 'mess' : 'hostel';
-        const serviceLabel = isMessOwner ? 'Mess' : 'Hostel';
-        const subscriptionLabel = isMessOwner ? 'Subscribers' : 'Customers';
+        const isGymOwner = userTypeFromProfile.includes('gymOwner');
+        const serviceType = isMessOwner ? 'mess' : isGymOwner ? 'gym' : 'hostel';
+        const serviceLabel = isMessOwner ? 'Mess' : isGymOwner ? 'Gym' : 'Hostel';
+        const subscriptionLabel = isMessOwner ? 'Subscribers' : isGymOwner ? 'Members' : 'Customers';
         
         // Fetch revenue data
         const revenueData = await getRevenueStats();
+        console.log("Revenue data for dashboard:", revenueData);
         
         // Fetch pending bookings
         const pendingBookings = await getBookings('pending');
+        console.log("Pending bookings:", pendingBookings);
+        
+        // Fetch accepted bookings to count active customers
+        const acceptedBookings = await getAcceptedBookings();
+        console.log("Accepted bookings:", acceptedBookings);
         
         // Filter pending bookings by service type
         const relevantPendingBookings = pendingBookings.filter(
           booking => booking.serviceType === serviceType
         );
         
+        // Filter accepted bookings by service type for active customers count
+        const relevantAcceptedBookings = acceptedBookings.filter(
+          booking => booking.serviceType === serviceType && booking.paymentStatus === 'paid'
+        );
+        
         // Get service-specific revenue
         const totalServiceRevenue = revenueData.serviceTypeRevenue[serviceType] || 0;
-        const relevantTransactions = revenueData.recentTransactions.filter(
-          t => t.serviceType === serviceType
-        );
+        
+        // Get relevant transactions directly from allBookings that match the service type
+        const relevantTransactions = revenueData.allBookings 
+          ? revenueData.allBookings.filter(booking => booking.serviceType === serviceType)
+          : [];
+            
+        console.log(`${serviceType} transactions:`, relevantTransactions);
         
         // Set stats data
         setStatsData([
@@ -52,51 +68,59 @@ export default function OwnerDashboard() {
             value: totalServiceRevenue.toLocaleString('en-IN'),
             prefix: "₹",
             colorClass: "text-blue-600",
-            icon: isMessOwner ? <FaUtensils /> : <FaBuilding />
+            icon: isMessOwner ? <FaUtensils /> : isGymOwner ? <FaDumbbell /> : <FaBuilding />
           },
           {
             title: `Active ${subscriptionLabel}`,
-            value: relevantTransactions.length.toString(),
-            colorClass: "text-blue-600"
+            value: relevantAcceptedBookings.length.toString(),
+            colorClass: "text-green-600"
           },
           {
-            title: `Pending ${isMessOwner ? 'Subscriptions' : 'Bookings'}`,
+            title: `Pending ${isMessOwner ? 'Subscriptions' : isGymOwner ? 'Memberships' : 'Bookings'}`,
             value: relevantPendingBookings.length.toString(),
-            colorClass: "text-blue-600"
+            colorClass: "text-yellow-600"
           }
         ]);
         
-        // Format recent bookings from recent transactions
-        const formattedBookings = relevantTransactions.map(transaction => {
-          // Format date in a more readable way
-          const bookingDate = new Date(transaction.date);
-          const formattedDate = bookingDate.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
+        // Format recent bookings from relevant transactions
+        const formattedBookings = relevantTransactions
+          .sort((a, b) => new Date(b.date) - new Date(a.date)) // Sort by date, most recent first
+          .slice(0, 5) // Take only the 5 most recent
+          .map(transaction => {
+            // Format date in a more readable way
+            const bookingDate = new Date(transaction.date);
+            const formattedDate = bookingDate.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            });
+            
+            // Generate description with service name and duration
+            let description = transaction.serviceName;
+            if (transaction.duration) {
+              const durationText = transaction.originalDuration || 
+                                 `${transaction.duration} ${transaction.duration === 1 ? 'month' : 'months'}`;
+              description += ` · ${durationText}`;
+            }
+            
+            // Determine status based on payment status from the booking
+            const isPaid = transaction.paid || false;
+            const status = isPaid ? "Active" : "Pending Payment";
+            const statusColor = isPaid ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800";
+            
+            return {
+              title: transaction.student?.username || 'Unknown User',
+              subtitle: transaction.student?.email || '',
+              time: `Booked on ${formattedDate}`,
+              status: status,
+              statusColor: statusColor,
+              description: description,
+              value: `₹${transaction.amount.toLocaleString('en-IN')}`,
+              valueCaption: transaction.monthlyPrice 
+                ? `₹${transaction.monthlyPrice.toLocaleString('en-IN')}/month × ${transaction.duration || 1}`
+                : ''
+            };
           });
-          
-          // Generate description with service name and duration
-          let description = transaction.serviceName;
-          if (transaction.duration) {
-            const durationText = transaction.originalDuration && 
-                                transaction.originalDuration.toString().toLowerCase().includes('year') 
-                                ? transaction.originalDuration 
-                                : `${transaction.duration} ${transaction.duration === 1 ? 'month' : 'months'}`;
-            description += ` · ${durationText}`;
-          }
-          
-          return {
-            title: transaction.student?.username || 'Unknown User',
-            subtitle: transaction.student?.email || '',
-            time: `Booked on ${formattedDate}`,
-            status: "Active",
-            statusColor: "bg-green-100 text-green-800",
-            description: description,
-            value: `₹${transaction.amount.toLocaleString('en-IN')}`,
-            valueCaption: `${transaction.monthlyPrice.toLocaleString('en-IN')}/month`
-          };
-        });
         
         setRecentBookings(formattedBookings);
         setError(null);
@@ -112,8 +136,9 @@ export default function OwnerDashboard() {
   }, []);
 
   const isMessOwner = userType.includes('messOwner');
-  const serviceLabel = isMessOwner ? 'Mess' : 'Hostel';
-  const bookingLabel = isMessOwner ? 'Subscriptions' : 'Bookings';
+  const isGymOwner = userType.includes('gymOwner');
+  const serviceLabel = isMessOwner ? 'Mess' : isGymOwner ? 'Gym' : 'Hostel';
+  const bookingLabel = isMessOwner ? 'Subscriptions' : isGymOwner ? 'Memberships' : 'Bookings';
 
   const quickActions = [
     {
@@ -162,6 +187,15 @@ export default function OwnerDashboard() {
           <ActivityList 
             title={`Recent ${bookingLabel}`} 
             activities={recentBookings} 
+            emptyStateMessage={
+              <div className="text-center py-10 text-gray-500">
+                <FaExclamationCircle className="mx-auto text-4xl mb-3 text-gray-400" />
+                <h4 className="text-lg font-medium text-gray-700">No recent {bookingLabel.toLowerCase()} found</h4>
+                <p className="mt-1">
+                  When you receive {bookingLabel.toLowerCase()}, they will appear here.
+                </p>
+              </div>
+            }
           />
         </div>
         <div className="bg-white p-6 rounded-lg shadow">

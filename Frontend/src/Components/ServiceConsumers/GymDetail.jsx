@@ -24,15 +24,20 @@ import {
   FaWeight,
   FaChair,
   FaSpinner,
-  FaUserFriends
+  FaUserFriends,
+  FaCreditCard,
+  FaMoneyBillWave,
+  FaHourglass
 } from 'react-icons/fa';
-import { fetchOwnerDetails } from '../../utils/api';
+import { fetchOwnerDetails, checkServiceBookingStatus, updatePaymentStatus } from '../../utils/api';
 import OwnerProfileModal from './OwnerProfileModal';
+import BookingModal from './BookingModal';
+import { toast } from 'react-toastify';
 
 // CSS classes for animation
 const ANIMATION_CLASSES = "animate-fadeIn";
 
-export default function GymDetail({ gym, onClose }) {
+export default function GymDetail({ gym, onClose, onBookingSuccess }) {
   if (!gym) return null;
   
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -41,8 +46,10 @@ export default function GymDetail({ gym, onClose }) {
   const [error, setError] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [bookingStatus, setBookingStatus] = useState(null);
   
-  // Fetch owner details
+  // Fetch owner details and booking status
   useEffect(() => {
     const getOwnerDetails = async () => {
       if (!gym.owner) return;
@@ -64,8 +71,20 @@ export default function GymDetail({ gym, onClose }) {
       }
     };
     
+    const getBookingStatus = async () => {
+      try {
+        // Check if the current user has any bookings for this gym
+        const status = await checkServiceBookingStatus('gym', gym._id);
+        console.log("Booking status:", status);
+        setBookingStatus(status);
+      } catch (err) {
+        console.error('Error fetching booking status:', err);
+      }
+    };
+    
     getOwnerDetails();
-  }, [gym.owner]);
+    getBookingStatus();
+  }, [gym.owner, gym._id]);
   
   // Function to display equipment icons
   const renderEquipmentIcon = (key) => {
@@ -200,6 +219,168 @@ export default function GymDetail({ gym, onClose }) {
     if (!gym.owner) return null;
     return typeof gym.owner === 'object' ? gym.owner._id : gym.owner;
   };
+
+  // Handle Membership Subscription
+  const handleSubscribe = () => {
+    // Make sure a plan is selected
+    if (!selectedPlan && gym.membershipPlans && gym.membershipPlans.length > 0) {
+      toast.warning('Please select a membership plan first');
+      return;
+    }
+    
+    const planDetails = selectedPlan !== null && gym.membershipPlans ? 
+      gym.membershipPlans[selectedPlan] : null;
+    
+    console.log("Selected plan index:", selectedPlan);
+    console.log("Selected plan details:", planDetails);
+    
+    // Simply show the booking modal
+    setShowSubscriptionModal(true);
+  };
+  
+  // Handle subscription success
+  const handleSubscriptionSuccess = (booking) => {
+    setShowSubscriptionModal(false);
+    setBookingStatus({
+      hasBooking: true,
+      status: 'pending',
+      booking: booking
+    });
+    
+    toast.success('Gym membership request sent successfully!');
+    if (onBookingSuccess) {
+      onBookingSuccess(booking);
+    }
+  };
+
+  // Handle payment
+  const handlePayment = () => {
+    if (!bookingStatus || !bookingStatus.hasBooking || !bookingStatus.booking) {
+      toast.error('No active booking found');
+      return;
+    }
+
+    const booking = bookingStatus.booking;
+    
+    // Confirm with the user before processing payment
+    if (window.confirm('Confirm payment for this gym membership?')) {
+      setLoading(true);
+      
+      // Call the API to update payment status
+      updatePaymentStatus(booking._id, 'paid')
+        .then(response => {
+          // Update local state
+          setBookingStatus({
+            ...bookingStatus,
+            isPaid: true
+          });
+          
+          toast.success('Payment processed successfully!');
+          
+          // Refresh booking status from the server
+          checkServiceBookingStatus('gym', gym._id)
+            .then(freshStatus => {
+              setBookingStatus(freshStatus);
+              console.log("Updated booking status after payment:", freshStatus);
+            })
+            .catch(error => {
+              console.error('Error refreshing booking status:', error);
+            });
+          
+          // Notify parent component
+          if (onBookingSuccess) {
+            onBookingSuccess(booking);
+          }
+        })
+        .catch(error => {
+          console.error('Payment error:', error);
+          toast.error('Failed to process payment. Please try again.');
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  };
+  
+  // Get subscription button state
+  const getSubscriptionButton = () => {
+    // If still loading, show loading state
+    if (loading) {
+      return {
+        text: 'Loading...',
+        className: 'bg-gray-500 cursor-not-allowed',
+        disabled: true,
+        onClick: null,
+        icon: <FaSpinner className="mr-2 animate-spin" />
+      };
+    }
+    
+    // If no booking status fetched yet
+    if (!bookingStatus) {
+      return {
+        text: 'Get Membership',
+        className: 'bg-green-600 hover:bg-green-700',
+        disabled: false,
+        onClick: handleSubscribe,
+        icon: null
+      };
+    }
+    
+    // If user has a booking
+    if (bookingStatus.hasBooking) {
+      // Pending approval from gym owner
+      if (bookingStatus.status === 'pending') {
+        return {
+          text: 'Request Pending',
+          className: 'bg-yellow-500 hover:bg-yellow-600 cursor-not-allowed',
+          disabled: true,
+          onClick: null,
+          icon: <FaHourglass className="mr-2" />
+        };
+      } 
+      // Accepted but not paid - DISABLED - Now handled directly by gym owner
+      else if (bookingStatus.status === 'accepted' && !bookingStatus.isPaid) {
+        return {
+          text: 'Payment Managed by Owner',
+          className: 'bg-blue-600 cursor-not-allowed',
+          disabled: true,
+          onClick: null,
+          icon: <FaInfoCircle className="mr-2" />
+        };
+      } 
+      // Accepted and paid - active membership
+      else if (bookingStatus.status === 'accepted' && bookingStatus.isPaid) {
+        return {
+          text: 'Active Membership',
+          className: 'bg-green-600 cursor-not-allowed',
+          disabled: true,
+          onClick: null,
+          icon: <FaCheckCircle className="mr-2" />
+        };
+      }
+      // Rejected
+      else if (bookingStatus.status === 'rejected') {
+        return {
+          text: 'Request Rejected',
+          className: 'bg-red-600 cursor-not-allowed',
+          disabled: true,
+          onClick: null,
+          icon: <FaTimes className="mr-2" />
+        };
+      }
+    }
+    
+    // Default state - no booking
+    return {
+      text: 'Get Membership',
+      className: 'bg-green-600 hover:bg-green-700',
+      disabled: false,
+      onClick: handleSubscribe,
+      icon: null
+    };
+  };
+  
+  const subscriptionButton = getSubscriptionButton();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[1000] p-4 overflow-y-auto" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
@@ -525,12 +706,11 @@ export default function GymDetail({ gym, onClose }) {
                   Contact Owner
                 </button>
                 <button 
-                  className={`px-4 py-2 text-white text-sm font-medium rounded-md transition shadow-md ${
-                    gym.availability ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'
-                  }`}
-                  disabled={!gym.availability}
+                  className={`px-4 py-2 text-white text-sm font-medium rounded-md transition shadow-md flex items-center ${subscriptionButton.className}`}
+                  disabled={subscriptionButton.disabled}
+                  onClick={subscriptionButton.onClick}
                 >
-                  {gym.availability ? 'Get Membership' : 'Not Available'}
+                  {subscriptionButton.icon} {subscriptionButton.text}
                 </button>
               </div>
             </div>
@@ -543,6 +723,19 @@ export default function GymDetail({ gym, onClose }) {
         <OwnerProfileModal 
           ownerId={getOwnerId()} 
           onClose={() => setShowOwnerProfile(false)} 
+        />
+      )}
+
+      {/* Show Subscription Modal when button is clicked */}
+      {showSubscriptionModal && (
+        <BookingModal 
+          service={{
+            ...gym,
+            selectedPlan: selectedPlan
+          }}
+          serviceType="gym"
+          onClose={() => setShowSubscriptionModal(false)}
+          onSuccess={handleSubscriptionSuccess}
         />
       )}
     </div>

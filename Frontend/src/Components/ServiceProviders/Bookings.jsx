@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaSpinner, FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaFilter, FaBed, FaRupeeSign, FaMapMarkerAlt, FaUtensils } from 'react-icons/fa';
+import { FaSpinner, FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaFilter, FaBed, FaRupeeSign, FaMapMarkerAlt, FaUtensils, FaDumbbell } from 'react-icons/fa';
 import { getBookings, updateBookingStatus, fetchUserProfile } from '../../utils/api';
 import { toast } from 'react-toastify';
 
@@ -24,7 +24,14 @@ export default function Bookings() {
         
         // Get service type based on owner type
         const isMessOwner = userTypeFromProfile.includes('messOwner');
-        const serviceType = isMessOwner ? 'mess' : 'hostel';
+        const isGymOwner = userTypeFromProfile.includes('gymOwner');
+        let serviceType = 'hostel';
+        
+        if (isMessOwner) {
+          serviceType = 'mess';
+        } else if (isGymOwner) {
+          serviceType = 'gym';
+        }
         
         // Fetch all bookings with the status filter
         const allBookings = await getBookings(statusFilter);
@@ -57,7 +64,15 @@ export default function Bookings() {
       
       // Show success notification
       const isMessOwner = userType.includes('messOwner');
-      const requestType = isMessOwner ? 'Subscription' : 'Booking';
+      const isGymOwner = userType.includes('gymOwner');
+      let requestType = 'Booking';
+      
+      if (isMessOwner) {
+        requestType = 'Subscription';
+      } else if (isGymOwner) {
+        requestType = 'Membership';
+      }
+      
       toast.success(`${requestType} ${status === 'accepted' ? 'accepted' : 'rejected'} successfully`);
     } catch (err) {
       console.error(`Error ${status} booking:`, err);
@@ -108,9 +123,29 @@ export default function Bookings() {
     return types[type] || type;
   };
   
+  // Get gym type display
+  const getGymTypeLabel = (type) => {
+    if (!type) return 'Not specified';
+    const types = {
+      weightlifting: 'Weightlifting',
+      cardio: 'Cardio',
+      yoga: 'Yoga',
+      crossfit: 'CrossFit',
+      mixed: 'Mixed'
+    };
+    return types[type] || type;
+  };
+  
   // Determine owner type
   const isMessOwner = userType.includes('messOwner');
-  const requestLabel = isMessOwner ? 'Subscription' : 'Booking';
+  const isGymOwner = userType.includes('gymOwner');
+  let requestLabel = 'Booking';
+  
+  if (isMessOwner) {
+    requestLabel = 'Subscription';
+  } else if (isGymOwner) {
+    requestLabel = 'Membership';
+  }
 
   if (loading && filteredBookings.length === 0) {
     return (
@@ -124,7 +159,9 @@ export default function Bookings() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-800">
-          {isMessOwner ? 'Subscription Requests' : 'Booking Requests'}
+          {isMessOwner ? 'Subscription Requests' : 
+           isGymOwner ? 'Membership Requests' : 
+           'Booking Requests'}
         </h2>
         
         {/* Status filter */}
@@ -153,11 +190,19 @@ export default function Bookings() {
       {filteredBookings.length === 0 ? (
         <div className="bg-gray-50 rounded-lg p-6 text-center">
           <FaCalendarAlt className="mx-auto text-gray-400 text-4xl mb-3" />
-          <h3 className="text-gray-700 font-medium text-lg">No {statusFilter} {isMessOwner ? 'subscriptions' : 'bookings'}</h3>
+          <h3 className="text-gray-700 font-medium text-lg">No {statusFilter} {
+            isMessOwner ? 'subscriptions' : 
+            isGymOwner ? 'memberships' : 
+            'bookings'
+          }</h3>
           <p className="text-gray-500 mt-1">
             {statusFilter === 'pending' 
               ? `You don't have any pending ${requestLabel.toLowerCase()} requests at the moment.`
-              : `You don't have any ${statusFilter} ${isMessOwner ? 'subscriptions' : 'bookings'} to display.`}
+              : `You don't have any ${statusFilter} ${
+                  isMessOwner ? 'subscriptions' : 
+                  isGymOwner ? 'memberships' : 
+                  'bookings'
+                } to display.`}
           </p>
         </div>
       ) : (
@@ -174,6 +219,12 @@ export default function Bookings() {
                       booking.serviceDetails?.messName && (
                         <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded mb-2 ml-1 inline-block">
                           {booking.serviceDetails.messName}
+                        </span>
+                      )
+                    ) : isGymOwner ? (
+                      booking.serviceDetails?.gymName && (
+                        <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded mb-2 ml-1 inline-block">
+                          {booking.serviceDetails.gymName}
                         </span>
                       )
                     ) : (
@@ -321,17 +372,77 @@ export default function Bookings() {
                   </div>
                 )}
                 
+                {/* Gym details section */}
+                {booking.serviceType === 'gym' && booking.serviceDetails && (
+                  <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <FaDumbbell className="mr-2 text-green-600" /> Gym Details
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-sm">
+                          <span className="font-medium">Gym Name:</span> {booking.serviceDetails.gymName || 'Not specified'}
+                        </p>
+                        <p className="text-sm">
+                          <span className="font-medium">Gym Type:</span> {getGymTypeLabel(booking.serviceDetails.gymType)}
+                        </p>
+                        {booking.serviceDetails.openingHours && (
+                          <p className="text-sm">
+                            <span className="font-medium">Hours:</span> {booking.serviceDetails.openingHours}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        {booking.bookingDetails?.planName && booking.bookingDetails?.planPrice && (
+                          <p className="text-sm flex items-center">
+                            <span className="font-medium mr-1">Selected Plan:</span> 
+                            {booking.bookingDetails.planName} - <FaRupeeSign className="text-xs mx-1" /> 
+                            {booking.bookingDetails.planPrice}
+                          </p>
+                        )}
+                        {booking.serviceDetails.capacity && (
+                          <p className="text-sm">
+                            <span className="font-medium">Capacity:</span> {booking.serviceDetails.capacity} people
+                          </p>
+                        )}
+                        {booking.serviceDetails.address && (
+                          <p className="text-sm flex items-start">
+                            <span className="font-medium mr-1">Address:</span>
+                            <span className="flex items-center">
+                              <FaMapMarkerAlt className="text-xs mr-1 mt-1 text-green-500" /> 
+                              {booking.serviceDetails.address}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {booking.serviceDetails.images && booking.serviceDetails.images.length > 0 && (
+                      <div className="mt-2">
+                        <div className="h-32 rounded-md overflow-hidden">
+                          <img 
+                            src={booking.serviceDetails.images[0].url} 
+                            alt={booking.serviceDetails.gymName || 'Gym'} 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
                   <div>
                     <h4 className="text-sm font-medium text-gray-500 mb-1">
-                      {isMessOwner ? 'Subscription Details' : 'Booking Details'}
+                      {isMessOwner ? 'Subscription Details' : 
+                       isGymOwner ? 'Membership Details' : 
+                       'Booking Details'}
                     </h4>
                     {booking.serviceType === 'hostel' && (
                       <p className="text-sm">
                         <span className="font-medium">Check-in Date:</span> {formatDate(booking.bookingDetails?.checkInDate)}
                       </p>
                     )}
-                    {booking.serviceType === 'mess' && (
+                    {(booking.serviceType === 'mess' || booking.serviceType === 'gym') && (
                       <p className="text-sm">
                         <span className="font-medium">Start Date:</span> {formatDate(booking.bookingDetails?.startDate)}
                       </p>
@@ -342,7 +453,9 @@ export default function Bookings() {
                     {booking.bookingDetails?.additionalRequirements && (
                       <div className="mt-2">
                         <p className="text-sm font-medium text-gray-500">
-                          {isMessOwner ? 'Special Diet Requirements:' : 'Additional Requirements:'}
+                          {isMessOwner ? 'Special Diet Requirements:' : 
+                           isGymOwner ? 'Fitness Goals:' : 
+                           'Additional Requirements:'}
                         </p>
                         <p className="text-sm bg-white p-2 rounded border border-gray-200 mt-1">
                           {booking.bookingDetails.additionalRequirements}

@@ -344,8 +344,12 @@ export const getRevenueStats = async () => {
     // We'll use the accepted bookings with paid status to calculate revenue
     const bookings = await getAcceptedBookings();
     
+    console.log('All accepted bookings:', bookings.length);
+    
     // Filter to only paid bookings
     const paidBookings = bookings.filter(booking => booking.paymentStatus === 'paid');
+    
+    console.log('All paid bookings:', paidBookings.length);
     
     // Calculate total revenue
     let totalRevenue = 0;
@@ -370,6 +374,13 @@ export const getRevenueStats = async () => {
     
     // Process each paid booking
     paidBookings.forEach(booking => {
+      // Check for valid service type and payment status
+      if (!booking.serviceType || booking.paymentStatus !== 'paid') {
+        return;
+      }
+      
+      console.log(`Processing ${booking.serviceType} booking:`, booking._id);
+      
       // Get price based on service type
       let monthlyPrice = 0;
       
@@ -377,6 +388,45 @@ export const getRevenueStats = async () => {
         monthlyPrice = booking.serviceDetails?.price || 0;
       } else if (booking.serviceType === 'mess') {
         monthlyPrice = booking.serviceDetails?.monthlyPrice || 0;
+      } else if (booking.serviceType === 'gym') {
+        // For gym, get price from the selected membership plan
+        if (booking.serviceDetails && booking.serviceDetails.membershipPlans) {
+          // Find which plan was selected
+          let selectedPlan;
+          
+          // If bookingDetails has planName, use that to find the plan
+          if (booking.bookingDetails && booking.bookingDetails.planName) {
+            selectedPlan = booking.serviceDetails.membershipPlans.find(
+              p => p.name === booking.bookingDetails.planName
+            );
+          } 
+          // If we have planIndex, use that
+          else if (booking.bookingDetails && typeof booking.bookingDetails.selectedPlan === 'number') {
+            selectedPlan = booking.serviceDetails.membershipPlans[booking.bookingDetails.selectedPlan];
+          }
+          
+          // If we found a plan, use its price
+          if (selectedPlan && selectedPlan.price) {
+            monthlyPrice = selectedPlan.price;
+            console.log(`Found plan price ${monthlyPrice} for gym booking ${booking._id}`);
+          } 
+          // If no specific plan found but there's at least one plan with a price, use the first one
+          else if (booking.serviceDetails.membershipPlans.length > 0 && 
+                  booking.serviceDetails.membershipPlans[0].price) {
+            monthlyPrice = booking.serviceDetails.membershipPlans[0].price;
+            console.log(`Using default plan price ${monthlyPrice} for gym booking ${booking._id}`);
+          }
+        }
+        
+        // If we still don't have a price, try other sources
+        if (monthlyPrice === 0) {
+          monthlyPrice = booking.bookingDetails?.planPrice || 
+                         booking.bookingDetails?.price || 
+                         booking.amount || 
+                         600; // Default price based on provided document
+          
+          console.log(`Using alternative price source: ${monthlyPrice} for gym booking ${booking._id}`);
+        }
       } else {
         // Default fallback
         monthlyPrice = booking.serviceDetails?.price || 0;
@@ -404,8 +454,12 @@ export const getRevenueStats = async () => {
           durationInMonths = parseInt(durationStr) || 1;
         }
         
+        // For ALL service types, including gym, multiply by duration
         totalPrice = monthlyPrice * durationInMonths;
+        console.log(`Calculated total price as ${monthlyPrice} × ${durationInMonths} = ${totalPrice}`);
       }
+      
+      console.log(`${booking.serviceType} revenue: ${totalPrice} for duration: ${durationInMonths} months`);
       
       totalRevenue += totalPrice;
       
@@ -415,13 +469,15 @@ export const getRevenueStats = async () => {
       }
       
       // Add to monthly revenue
-      const bookingDate = new Date(booking.updatedAt);
+      const bookingDate = new Date(booking.updatedAt || booking.createdAt);
       const monthYear = `${bookingDate.getFullYear()}-${bookingDate.getMonth() + 1}`;
       
       if (monthlyRevenue[monthYear] !== undefined) {
         monthlyRevenue[monthYear] += totalPrice;
       }
     });
+    
+    console.log('Service type revenue:', serviceTypeRevenue);
     
     // Format monthly data for charts
     const monthlyData = Object.entries(monthlyRevenue).map(([key, value]) => {
@@ -439,6 +495,7 @@ export const getRevenueStats = async () => {
     const formattedBookings = paidBookings.map(booking => {
       // Extract and convert duration
       let durationInMonths = 1; // Default to 1 month
+      let durationDisplay = booking.bookingDetails?.duration || '1 month';
       
       if (booking.bookingDetails?.duration) {
         const durationStr = booking.bookingDetails.duration.toString().toLowerCase();
@@ -468,24 +525,68 @@ export const getRevenueStats = async () => {
       } else if (booking.serviceType === 'mess') {
         monthlyPrice = booking.serviceDetails?.monthlyPrice || 0;
         serviceName = booking.serviceDetails?.messName || 'Mess';
+      } else if (booking.serviceType === 'gym') {
+        // Find the plan and get its price
+        if (booking.serviceDetails && booking.serviceDetails.membershipPlans) {
+          // Find which plan was selected
+          let selectedPlan;
+          
+          // If bookingDetails has planName, use that to find the plan
+          if (booking.bookingDetails && booking.bookingDetails.planName) {
+            selectedPlan = booking.serviceDetails.membershipPlans.find(
+              p => p.name === booking.bookingDetails.planName
+            );
+          } 
+          // If we have planIndex, use that
+          else if (booking.bookingDetails && typeof booking.bookingDetails.selectedPlan === 'number') {
+            selectedPlan = booking.serviceDetails.membershipPlans[booking.bookingDetails.selectedPlan];
+          }
+          
+          // If we found a plan, use its price
+          if (selectedPlan && selectedPlan.price) {
+            monthlyPrice = selectedPlan.price;
+          } 
+          // If no specific plan found but there's at least one plan with a price, use the first one
+          else if (booking.serviceDetails.membershipPlans.length > 0 && 
+                  booking.serviceDetails.membershipPlans[0].price) {
+            monthlyPrice = booking.serviceDetails.membershipPlans[0].price;
+          }
+        }
+        
+        // If we still don't have a price, try other sources
+        if (monthlyPrice === 0) {
+          monthlyPrice = booking.bookingDetails?.planPrice || 
+                         booking.bookingDetails?.price || 
+                         booking.amount || 
+                         600; // Default price based on provided document
+        }
+        
+        serviceName = booking.serviceDetails?.gymName || 'Gym';
       } else {
         // Default fallback
         monthlyPrice = booking.serviceDetails?.price || 0;
       }
       
       // Calculate total amount
-      const totalAmount = monthlyPrice * durationInMonths;
-        
+      let totalAmount = monthlyPrice * durationInMonths;
+      
+      // Ensure student data is properly structured
+      const studentData = booking.student || {};
+      
       return {
         id: booking._id,
-        date: booking.updatedAt,
+        date: booking.updatedAt || booking.createdAt,
         amount: totalAmount,
         monthlyPrice: monthlyPrice,
-        student: booking.student,
+        student: {
+          _id: studentData._id || 'unknown',
+          username: studentData.username || 'Unknown User',
+          email: studentData.email || 'N/A'
+        },
         serviceType: booking.serviceType,
         serviceName: serviceName,
         duration: durationInMonths,
-        originalDuration: booking.bookingDetails?.duration || null
+        originalDuration: durationDisplay
       };
     });
     
