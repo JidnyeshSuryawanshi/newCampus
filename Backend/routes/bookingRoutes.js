@@ -5,7 +5,8 @@ const {
   getBooking,
   updateBookingStatus,
   cancelBooking,
-  updatePaymentStatus
+  updatePaymentStatus,
+  removeCustomer
 } = require('../Controllers/bookingController');
 
 const { protect } = require('../middleware/auth');
@@ -28,6 +29,10 @@ router.route('/:id')
 // Cancel booking
 router.route('/:id/cancel')
   .put(cancelBooking);
+
+// Remove customer (owner only)
+router.route('/:id/remove-customer')
+  .put(removeCustomer);
 
 // Update payment status
 router.route('/:id/payment')

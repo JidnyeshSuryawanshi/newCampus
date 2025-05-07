@@ -604,4 +604,30 @@ export const getRevenueStats = async () => {
   }
 };
 
+export const removeCustomer = async (bookingId) => {
+  try {
+    console.log(`Removing customer with booking ID: ${bookingId}`);
+    const response = await api.put(`/bookings/${bookingId}/remove-customer`);
+    
+    if (!response || !response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error removing customer:', error);
+    
+    // Extract error message from response if available
+    if (error.response && error.response.data) {
+      console.error('Server error response:', error.response.data);
+      throw {
+        message: error.response.data.error || 'Server error',
+        response: error.response
+      };
+    }
+    
+    throw error;
+  }
+};
+
 export default api;

@@ -380,4 +380,45 @@ exports.updatePaymentStatus = asyncHandler(async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+// @desc    Remove a customer - Owner only
+// @route   PUT /api/bookings/:id/remove-customer
+// @access  Private (Owner)
+exports.removeCustomer = asyncHandler(async (req, res, next) => {
+  try {
+    // Find booking
+    let booking = await Booking.findById(req.params.id);
+
+    if (!booking) {
+      return next(new ErrorResponse(`No booking found with id ${req.params.id}`, 404));
+    }
+
+    // Make sure user is booking owner
+    if (booking.owner.toString() !== req.user.id) {
+      return next(new ErrorResponse('Not authorized to remove this customer', 403));
+    }
+
+    // Allow removing customers with any status except already terminated or rejected ones
+    if (booking.status === 'terminated') {
+      return next(new ErrorResponse('This customer has already been removed', 400));
+    }
+
+    if (booking.status === 'rejected') {
+      return next(new ErrorResponse('Cannot remove a customer with a rejected booking', 400));
+    }
+
+    // Update the booking status to 'terminated'
+    booking.status = 'terminated';
+    booking.updatedAt = Date.now();
+    await booking.save();
+
+    res.status(200).json({
+      success: true,
+      data: booking,
+      message: 'Customer removed successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
 }); 

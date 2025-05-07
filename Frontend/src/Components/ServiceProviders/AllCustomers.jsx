@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FaSpinner, FaUserCircle, FaEnvelope, FaCalendarAlt, FaInfoCircle, FaMapMarkerAlt, FaRupeeSign, FaSearch, FaBed, FaTimes, FaPhoneAlt, FaIdCard, FaGraduationCap, FaUser } from 'react-icons/fa';
-import { getAcceptedBookings } from '../../utils/api';
+import { FaSpinner, FaUserCircle, FaEnvelope, FaCalendarAlt, FaInfoCircle, FaMapMarkerAlt, FaRupeeSign, FaSearch, FaBed, FaTimes, FaPhoneAlt, FaIdCard, FaGraduationCap, FaUser, FaTrash, FaExclamationTriangle } from 'react-icons/fa';
+import { getAcceptedBookings, removeCustomer } from '../../utils/api';
+import { toast } from 'react-toastify';
 
 export default function AllCustomers() {
   const [customers, setCustomers] = useState([]);
@@ -8,22 +9,29 @@ export default function AllCustomers() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerToRemove, setCustomerToRemove] = useState(null);
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  // Function to fetch customers
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      const bookings = await getAcceptedBookings();
+      
+      // Filter out any terminated bookings
+      const activeBookings = bookings.filter(booking => booking.status === 'accepted');
+      
+      setCustomers(activeBookings);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching customers:', err);
+      setError('Failed to load customers. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        setLoading(true);
-        const bookings = await getAcceptedBookings();
-        setCustomers(bookings);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching customers:', err);
-        setError('Failed to load customers. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchCustomers();
   }, []);
 
@@ -77,7 +85,130 @@ export default function AllCustomers() {
     );
   });
 
-  if (loading) {
+  // Function to initiate customer removal process
+  const initiateRemoveCustomer = (booking) => {
+    setCustomerToRemove(booking);
+  };
+
+  // Function to cancel customer removal
+  const cancelRemoveCustomer = () => {
+    setCustomerToRemove(null);
+  };
+
+  // Function to confirm and execute customer removal
+  const confirmRemoveCustomer = async () => {
+    if (!customerToRemove) return;
+    
+    try {
+      setIsRemoving(true);
+      
+      // Call API to remove customer
+      const result = await removeCustomer(customerToRemove._id);
+      
+      // If successful, update the customers list
+      if (result && result.success) {
+        // Update local state - remove the customer from the list
+        setCustomers(prevCustomers => 
+          prevCustomers.filter(customer => customer._id !== customerToRemove._id)
+        );
+        
+        // If a customer details modal is open, close it
+        if (selectedCustomer && selectedCustomer._id === customerToRemove._id) {
+          setSelectedCustomer(null);
+        }
+        
+        const studentName = customerToRemove.student?.username || 'Customer';
+        toast.success(`${studentName} has been removed successfully`);
+      } else {
+        // If the API call was successful but didn't return success: true
+        toast.error('Failed to remove customer due to server error');
+        // Refresh the customer list
+        await fetchCustomers();
+      }
+    } catch (err) {
+      console.error('Error removing customer:', err);
+      
+      // Show specific error message for schema validation errors
+      if (err.message && err.message.includes('valid enum value')) {
+        toast.error('System error: The status value is not valid. Please contact the administrator.');
+      } else {
+        toast.error(err.response?.data?.error || 'Failed to remove customer. Please try again.');
+      }
+      
+      // Always refresh the customer list after an error to ensure UI is in sync
+      await fetchCustomers();
+    } finally {
+      setIsRemoving(false);
+      setCustomerToRemove(null);
+    }
+  };
+
+  // Customer Removal Confirmation Modal component
+  const RemoveCustomerModal = () => {
+    if (!customerToRemove) return null;
+    
+    const studentName = customerToRemove.student?.username || 'this customer';
+    const serviceName = customerToRemove.serviceDetails?.roomName || 
+                      customerToRemove.serviceDetails?.messName || 
+                      customerToRemove.serviceDetails?.gymName || 
+                      getServiceTypeDisplay(customerToRemove.serviceType);
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={cancelRemoveCustomer}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md animate-fadeIn" onClick={e => e.stopPropagation()}>
+          <div className="p-5 border-b border-gray-200 flex items-center text-red-600">
+            <FaExclamationTriangle className="text-xl mr-2" />
+            <h3 className="text-xl font-semibold">Remove Customer</h3>
+          </div>
+          
+          <div className="p-5">
+            <p className="text-gray-700 mb-4">Are you sure you want to remove <span className="font-semibold">{studentName}</span>?</p>
+            
+            <div className="bg-gray-50 p-4 rounded-md border border-gray-200 mb-4">
+              <p className="text-gray-600 text-sm mb-2">This will:</p>
+              <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
+                <li>Terminate their active booking for <span className="font-medium">{serviceName}</span></li>
+                <li>Remove them from your customers list</li>
+                <li>Require them to make a new booking if they want to use your services again</li>
+              </ul>
+              <p className="text-sm text-red-600 mt-3 font-medium">This action cannot be undone.</p>
+            </div>
+          </div>
+          
+          <div className="p-4 bg-gray-100 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={cancelRemoveCustomer}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 disabled:opacity-50"
+              disabled={isRemoving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmRemoveCustomer}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 flex items-center"
+              disabled={isRemoving}
+            >
+              {isRemoving ? (
+                <>
+                  <FaSpinner className="animate-spin mr-2" />
+                  Removing...
+                </>
+              ) : (
+                <>
+                  <FaTrash className="mr-2" />
+                  Remove Customer
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (loading && customers.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
         <FaSpinner className="animate-spin text-blue-600 text-4xl" />
@@ -112,6 +243,13 @@ export default function AllCustomers() {
         </div>
       )}
       
+      {loading && customers.length > 0 && (
+        <div className="bg-blue-50 text-blue-700 px-4 py-3 rounded flex items-center">
+          <FaSpinner className="animate-spin mr-2" />
+          <span>Refreshing customer list...</span>
+        </div>
+      )}
+      
       {filteredCustomers.length === 0 ? (
         <div className="bg-gray-50 rounded-lg p-6 text-center">
           <FaUserCircle className="mx-auto text-gray-400 text-4xl mb-3" />
@@ -125,7 +263,8 @@ export default function AllCustomers() {
           {filteredCustomers.map(booking => (
             <div key={booking._id} className="bg-white rounded-lg shadow overflow-hidden">
               <div className="p-5 border-b border-gray-100">
-                <div className="flex items-start">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start flex-grow">
                   <div className="flex-shrink-0 mr-4">
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-500">
                       <FaUserCircle size={32} />
@@ -156,103 +295,26 @@ export default function AllCustomers() {
                       </div>
                     </div>
                   </div>
+                  </div>
+                  {/* Remove Customer button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      initiateRemoveCustomer(booking);
+                    }}
+                    className="text-red-500 hover:text-red-700 p-2 ml-2 flex-shrink-0"
+                    title="Remove Customer"
+                  >
+                    <FaTrash />
+                  </button>
                 </div>
               </div>
               
-              <div className="p-5 bg-gray-50">
-                {/* Room details section for hostel bookings */}
-                {booking.serviceType === 'hostel' && booking.serviceDetails && (
-                  <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                      <FaBed className="mr-2 text-blue-600" /> Room Details
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm">
-                          <span className="font-medium">Room Name:</span> {booking.serviceDetails.roomName || 'Not specified'}
-                        </p>
-                        <p className="text-sm">
-                          <span className="font-medium">Room Type:</span> {getRoomTypeLabel(booking.serviceDetails.roomType)}
-                        </p>
-                        {booking.serviceDetails.gender && (
-                          <p className="text-sm">
-                            <span className="font-medium">Gender:</span> {booking.serviceDetails.gender.charAt(0).toUpperCase() + booking.serviceDetails.gender.slice(1)}
-                          </p>
-                        )}
-                        {booking.serviceDetails.price && (
-                          <p className="text-sm flex items-center">
-                            <span className="font-medium mr-1">Price:</span> 
-                            <FaRupeeSign className="text-xs mr-1" /> 
-                            {booking.serviceDetails.price}/month
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        {booking.serviceDetails.images && booking.serviceDetails.images.length > 0 && (
-                          <div className="h-24 w-full rounded-md overflow-hidden">
-                            <img 
-                              src={booking.serviceDetails.images[0].url} 
-                              alt={booking.serviceDetails.roomName || 'Room'} 
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
-                        {booking.serviceDetails.address && (
-                          <p className="text-sm flex items-start mt-2">
-                            <FaMapMarkerAlt className="text-xs mr-1 mt-1 text-blue-500" /> 
-                            {booking.serviceDetails.address}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-500 mb-2">Booking Details</h4>
-                    <p className="text-sm">
-                      <span className="font-medium">Check-in Date:</span> {formatDate(booking.bookingDetails?.checkInDate)}
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium">Duration:</span> {booking.bookingDetails?.duration}
-                    </p>
-                    {booking.bookingDetails?.additionalRequirements && (
-                      <div className="mt-2">
-                        <p className="text-sm font-medium text-gray-500">Additional Requirements:</p>
-                        <p className="text-sm bg-white p-2 rounded border border-gray-200 mt-1">
-                          {booking.bookingDetails.additionalRequirements}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-500 mb-2">Booking Information</h4>
-                    <p className="text-sm">
-                      <span className="font-medium">Status:</span> 
-                      <span className="text-green-600 font-medium ml-1">Active</span>
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium">Payment Status:</span> 
-                      <span className={`font-medium ml-1 ${booking.paymentStatus === 'paid' ? 'text-green-600' : 'text-yellow-600'}`}>
-                        {booking.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
-                      </span>
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium">Booking Date:</span> {formatDate(booking.createdAt)}
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium">Last Updated:</span> {formatDate(booking.updatedAt)}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="mt-4 pt-4 border-t border-gray-200 p-5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center text-blue-600">
                       <FaInfoCircle className="mr-2" />
-                      <span className="text-sm font-medium">Customer since {formatDate(booking.updatedAt)}</span>
+                    <span className="text-sm font-medium">Customer since {formatDate(booking.createdAt)}</span>
                     </div>
                     <button
                       className="px-4 py-2 border border-blue-500 text-blue-600 rounded hover:bg-blue-50 text-sm"
@@ -260,7 +322,6 @@ export default function AllCustomers() {
                     >
                       View Details
                     </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -274,12 +335,22 @@ export default function AllCustomers() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="p-5 border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-xl font-semibold text-gray-800">Student Details</h3>
+              <div className="flex items-center">
+                {/* Add Remove Customer button to modal */}
+                <button
+                  onClick={() => initiateRemoveCustomer(selectedCustomer)}
+                  className="mr-4 text-red-500 hover:text-red-700 flex items-center"
+                  title="Remove Customer"
+                >
+                  <FaTrash className="mr-1" /> Remove
+                </button>
               <button 
                 onClick={closeDetailsModal}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FaTimes size={20} />
               </button>
+              </div>
             </div>
             
             <div className="p-6">
@@ -486,6 +557,9 @@ export default function AllCustomers() {
           </div>
         </div>
       )}
+
+      {/* Remove Customer Confirmation Modal */}
+      {customerToRemove && <RemoveCustomerModal />}
     </div>
   );
 }
