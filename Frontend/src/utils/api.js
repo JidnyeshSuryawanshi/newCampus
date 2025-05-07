@@ -277,9 +277,12 @@ export const cancelBooking = async (bookingId) => {
   }
 };
 
-export const updatePaymentStatus = async (bookingId, paymentStatus) => {
+export const updatePaymentStatus = async (bookingId, paymentStatus, paymentDetails = null) => {
   try {
-    const response = await api.put(`/bookings/${bookingId}/payment`, { paymentStatus });
+    const response = await api.put(`/bookings/${bookingId}/payment`, { 
+      paymentStatus,
+      paymentDetails 
+    });
     return response.data;
   } catch (error) {
     console.error('Error updating payment status:', error);

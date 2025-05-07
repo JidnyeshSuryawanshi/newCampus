@@ -30,8 +30,10 @@ import {
   FaHourglass
 } from 'react-icons/fa';
 import { fetchOwnerDetails, checkServiceBookingStatus, updatePaymentStatus } from '../../utils/api';
+import { initiateRazorpayPayment } from '../../utils/razorpay';
 import OwnerProfileModal from './OwnerProfileModal';
 import BookingModal from './BookingModal';
+import Receipt from './Receipt';
 import { toast } from 'react-toastify';
 
 // CSS classes for animation
@@ -48,6 +50,8 @@ export default function GymDetail({ gym, onClose, onBookingSuccess }) {
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [bookingStatus, setBookingStatus] = useState(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
   
   // Fetch owner details and booking status
   useEffect(() => {
@@ -248,63 +252,6 @@ export default function GymDetail({ gym, onClose, onBookingSuccess }) {
     });
     
     toast.success('Gym membership request sent successfully!');
-    if (onBookingSuccess) {
-      onBookingSuccess(booking);
-    }
-  };
-
-  // Handle payment
-  const handlePayment = () => {
-    if (!bookingStatus || !bookingStatus.hasBooking || !bookingStatus.booking) {
-      toast.error('No active booking found');
-      return;
-    }
-
-    const booking = bookingStatus.booking;
-    
-    // Confirm with the user before processing payment
-    if (window.confirm('Confirm payment for this gym membership?')) {
-      setLoading(true);
-      
-      // Call the API to update payment status
-      updatePaymentStatus(booking._id, 'paid')
-        .then(response => {
-          // Update local state
-          setBookingStatus({
-            ...bookingStatus,
-            isPaid: true
-          });
-          
-          toast.success('Payment processed successfully!');
-          
-          // Refresh booking status from the server
-          checkServiceBookingStatus('gym', gym._id)
-            .then(freshStatus => {
-              setBookingStatus(freshStatus);
-              console.log("Updated booking status after payment:", freshStatus);
-            })
-            .catch(error => {
-              console.error('Error refreshing booking status:', error);
-            });
-          
-          // Notify parent component
-          if (onBookingSuccess) {
-            onBookingSuccess(booking);
-          }
-        })
-        .catch(error => {
-          console.error('Payment error:', error);
-          toast.error('Failed to process payment. Please try again.');
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }
-  };
-  
-  // Get subscription button state
-  const getSubscriptionButton = () => {
-    // If still loading, show loading state
     if (loading) {
       return {
         text: 'Loading...',
@@ -736,6 +683,14 @@ export default function GymDetail({ gym, onClose, onBookingSuccess }) {
           serviceType="gym"
           onClose={() => setShowSubscriptionModal(false)}
           onSuccess={handleSubscriptionSuccess}
+        />
+      )}
+      
+      {/* Receipt Modal */}
+      {showReceiptModal && receiptData && (
+        <Receipt 
+          paymentData={receiptData}
+          onClose={() => setShowReceiptModal(false)}
         />
       )}
     </div>

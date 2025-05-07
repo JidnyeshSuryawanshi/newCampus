@@ -53,6 +53,22 @@ const bookingSchema = new mongoose.Schema({
     enum: ['unpaid', 'paid'],
     default: 'unpaid'
   },
+  paymentDetails: {
+    razorpay_payment_id: String,
+    razorpay_order_id: String,
+    razorpay_signature: String,
+    paymentDate: Date,
+    paymentMethod: {
+      type: String,
+      default: 'Razorpay'
+    },
+    amount: Number
+  },
+  receiptNumber: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -69,4 +85,4 @@ bookingSchema.pre('save', function(next) {
   next();
 });
 
-module.exports = mongoose.model('Booking', bookingSchema); 
+module.exports = mongoose.model('Booking', bookingSchema);

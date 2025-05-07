@@ -26,15 +26,17 @@ import {
   FaUserFriends,
   FaCreditCard
 } from 'react-icons/fa';
-import { fetchOwnerDetails, checkServiceBookingStatus, updatePaymentStatus } from '../../utils/api';
+import { fetchOwnerDetails, checkServiceBookingStatus, updatePaymentStatus, getUserDetails } from '../../utils/api';
+import { initiateRazorpayPayment } from '../../utils/razorpay';
 import OwnerProfileModal from './OwnerProfileModal';
 import BookingModal from './BookingModal';
-import { toast } from 'react-hot-toast';
+import Receipt from './Receipt';
+import { toast } from 'react-toastify';
 
 // CSS classes for animation
 const ANIMATION_CLASSES = "animate-fadeIn";
 
-export default function MessDetail({ mess, onClose, bookingStatus, onBookingSuccess }) {
+export default function MessDetail({ mess, onClose, bookingStatus, onBookingSuccess, onPayment }) {
   if (!mess) return null;
   
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -45,6 +47,9 @@ export default function MessDetail({ mess, onClose, bookingStatus, onBookingSucc
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [currentBookingStatus, setCurrentBookingStatus] = useState(bookingStatus);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   
   // Fetch booking status if not provided
   useEffect(() => {
@@ -65,7 +70,7 @@ export default function MessDetail({ mess, onClose, bookingStatus, onBookingSucc
     getBookingStatus();
   }, [mess._id, bookingStatus]);
   
-  // Fetch owner details
+  // Fetch owner details and user profile
   useEffect(() => {
     const getOwnerDetails = async () => {
       if (!mess.owner) return;
@@ -86,8 +91,20 @@ export default function MessDetail({ mess, onClose, bookingStatus, onBookingSucc
         setLoading(false);
       }
     };
+
+    const loadUserProfile = async () => {
+      try {
+        const userData = await getUserDetails();
+        if (userData && userData.data) {
+          setUserProfile(userData.data);
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
     
     getOwnerDetails();
+    loadUserProfile();
   }, [mess.owner]);
   
   // Function to display amenities icons
@@ -230,11 +247,11 @@ export default function MessDetail({ mess, onClose, bookingStatus, onBookingSucc
 
   // Handle payment click
   const handlePayment = () => {
-    // Show notification about payment implementation coming soon
-    toast.info('Payment functionality will be implemented in a future update.');
-    
-    // Don't update payment status - this will be implemented later
-    console.log('Payment button clicked for mess subscription');
+    if (onPayment && mess._id) {
+      onPayment(mess._id);
+    } else {
+      toast.error('Unable to process payment at this time');
+    }
   };
 
   // Get subscription button properties based on availability and booking status
@@ -664,6 +681,14 @@ export default function MessDetail({ mess, onClose, bookingStatus, onBookingSucc
           serviceType="mess"
           onClose={() => setShowSubscriptionModal(false)}
           onSuccess={handleSubscriptionSuccess}
+        />
+      )}
+
+      {/* Receipt Modal */}
+      {showReceiptModal && receiptData && (
+        <Receipt 
+          paymentData={receiptData}
+          onClose={() => setShowReceiptModal(false)}
         />
       )}
     </div>

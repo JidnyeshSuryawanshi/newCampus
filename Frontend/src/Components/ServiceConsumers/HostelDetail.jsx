@@ -27,12 +27,14 @@ import {
   FaSpinner,
   FaCreditCard
 } from 'react-icons/fa';
-import { fetchOwnerDetails, fetchOwnerProfileById } from '../../utils/api';
+import { fetchOwnerDetails, fetchOwnerProfileById, checkServiceBookingStatus, getUserDetails } from '../../utils/api';
+import { initiateRazorpayPayment } from '../../utils/razorpay';
 import { toast } from 'react-toastify';
 import OwnerProfileModal from './OwnerProfileModal';
 import BookingModal from './BookingModal';
+import Receipt from './Receipt';
 
-export default function HostelDetail({ hostel, onClose, bookingStatus, onBookingSuccess }) {
+export default function HostelDetail({ hostel, onClose, bookingStatus, onBookingSuccess, onPayment }) {
   if (!hostel) return null;
   
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -41,8 +43,11 @@ export default function HostelDetail({ hostel, onClose, bookingStatus, onBooking
   const [error, setError] = useState(null);
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   
-  // Fetch owner details
+  // Fetch owner details and user profile
   useEffect(() => {
     const getOwnerDetails = async () => {
       if (!hostel.owner) return;
@@ -62,7 +67,19 @@ export default function HostelDetail({ hostel, onClose, bookingStatus, onBooking
       }
     };
 
+    const loadUserProfile = async () => {
+      try {
+        const userData = await getUserDetails();
+        if (userData && userData.data) {
+          setUserProfile(userData.data);
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+
     getOwnerDetails();
+    loadUserProfile();
   }, [hostel]);
   
   // Function to display amenities icons
@@ -185,7 +202,11 @@ export default function HostelDetail({ hostel, onClose, bookingStatus, onBooking
 
   // Handle payment button click
   const handlePayNow = () => {
-    toast.info('Payment functionality will be implemented in a future update. Your booking is confirmed!');
+    if (onPayment && hostel._id) {
+      onPayment(hostel._id);
+    } else {
+      toast.error('Unable to process payment at this time');
+    }
   };
 
   // Get booking button status
@@ -589,6 +610,14 @@ export default function HostelDetail({ hostel, onClose, bookingStatus, onBooking
             serviceType="hostel"
             onClose={() => setShowBookingModal(false)}
             onSuccess={handleBookingSuccess}
+          />
+        )}
+
+        {/* Receipt Modal */}
+        {showReceiptModal && receiptData && (
+          <Receipt 
+            paymentData={receiptData}
+            onClose={() => setShowReceiptModal(false)}
           />
         )}
       </div>

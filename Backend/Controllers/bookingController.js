@@ -339,12 +339,12 @@ exports.cancelBooking = asyncHandler(async (req, res, next) => {
   }
 });
 
-// @desc    Update booking payment status
+// @desc    Update payment status of a booking
 // @route   PUT /api/bookings/:id/payment
 // @access  Private (Student)
 exports.updatePaymentStatus = asyncHandler(async (req, res, next) => {
   try {
-    const { paymentStatus } = req.body;
+    const { paymentStatus, paymentDetails } = req.body;
     
     // Validate payment status
     if (!paymentStatus || !['paid', 'unpaid'].includes(paymentStatus)) {
@@ -371,6 +371,19 @@ exports.updatePaymentStatus = asyncHandler(async (req, res, next) => {
     // Update the booking
     booking.paymentStatus = paymentStatus;
     booking.updatedAt = Date.now();
+    
+    // Add payment details if provided
+    if (paymentDetails && paymentStatus === 'paid') {
+      booking.paymentDetails = {
+        ...paymentDetails,
+        paymentDate: Date.now(),
+        paymentMethod: 'Razorpay'
+      };
+      
+      // Generate receipt number
+      booking.receiptNumber = 'RCP-' + Date.now().toString().slice(-8) + '-' + Math.floor(Math.random() * 1000);
+    }
+    
     await booking.save();
     
     res.status(200).json({

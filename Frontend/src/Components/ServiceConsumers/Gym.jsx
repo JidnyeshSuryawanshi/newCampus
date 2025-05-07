@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { FaMapMarkerAlt, FaRupeeSign, FaDumbbell, FaClock, FaMale, FaFemale, FaUsers, FaSpinner, FaHourglass, FaCheckCircle, FaCreditCard } from 'react-icons/fa';
 import GymDetail from './GymDetail';
 import BookingModal from './BookingModal';
-import { fetchGyms, checkServiceBookingStatus } from '../../utils/api';
+import Receipt from './Receipt';
+import { fetchGyms, checkServiceBookingStatus, getUserDetails } from '../../utils/api';
+import { initiateRazorpayPayment } from '../../utils/razorpay';
 import { toast } from 'react-toastify';
 
 export default function Gym() {
@@ -13,6 +15,9 @@ export default function Gym() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingStatuses, setBookingStatuses] = useState({});
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
     const loadGyms = async () => {
@@ -49,7 +54,19 @@ export default function Gym() {
       }
     };
 
+    const loadUserProfile = async () => {
+      try {
+        const userData = await getUserDetails();
+        if (userData && userData.data) {
+          setUserProfile(userData.data);
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+
     loadGyms();
+    loadUserProfile();
   }, []);
 
   // Function to get gym type icon/badge
@@ -125,9 +142,92 @@ export default function Gym() {
 
   // Handle payment for a gym
   const handlePayment = async (gymId) => {
-    // Show the details modal which will handle payment
-    setSelectedGym(gyms.find(gym => gym._id === gymId));
-    setShowDetailModal(true);
+    try {
+      setLoading(true);
+      const gym = gyms.find(gym => gym._id === gymId);
+      if (!gym) {
+        toast.error('Gym not found');
+        setLoading(false);
+        return;
+      }
+
+      const status = bookingStatuses[gymId];
+      if (!status || !status.hasBooking || !status.booking) {
+        toast.error('No active booking found');
+        setLoading(false);
+        return;
+      }
+
+      const booking = status.booking;
+      
+      // Get selected plan details
+      const selectedPlanIndex = booking.bookingDetails?.selectedPlan || 0;
+      const selectedPlan = gym.membershipPlans[selectedPlanIndex];
+      
+      if (!selectedPlan) {
+        toast.error('Could not find membership plan details');
+        setLoading(false);
+        return;
+      }
+      
+      // Prepare payment data for Razorpay
+      const paymentData = {
+        bookingId: booking._id,
+        amount: selectedPlan.price,
+        serviceType: 'gym',
+        serviceName: gym.gymName,
+        userName: userProfile?.name || userProfile?.username || 'User',
+        userEmail: userProfile?.email || '',
+        userPhone: userProfile?.phone || '',
+        serviceId: gym._id
+      };
+      
+      // Handle successful payment
+      const onPaymentSuccess = async (response) => {
+        try {
+          // Refresh booking status from the server
+          const freshStatus = await checkServiceBookingStatus('gym', gym._id);
+          
+          // Update booking statuses
+          setBookingStatuses(prev => ({
+            ...prev,
+            [gym._id]: freshStatus
+          }));
+          
+          // Prepare receipt data
+          const receiptData = {
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+            paymentDate: new Date(),
+            paymentMethod: 'Razorpay',
+            amount: selectedPlan.price,
+            customerName: userProfile?.name || userProfile?.username || 'User',
+            customerEmail: userProfile?.email || '',
+            serviceName: gym.gymName,
+            serviceType: 'gym',
+            duration: selectedPlan.duration,
+            receiptNumber: freshStatus.booking?.receiptNumber || `RCP-${Date.now().toString().slice(-8)}`
+          };
+          
+          // Show receipt
+          setReceiptData(receiptData);
+          setShowReceiptModal(true);
+        } catch (error) {
+          console.error('Error processing payment success:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      // Initialize Razorpay payment
+      await initiateRazorpayPayment(paymentData, onPaymentSuccess);
+      
+    } catch (error) {
+      console.error('Payment error:', error);
+      toast.error('Failed to process payment. Please try again.');
+      setLoading(false);
+    }
   };
   
   // Get membership button config for a gym
@@ -326,6 +426,14 @@ export default function Gym() {
           serviceType="gym"
           onClose={handleCloseBooking}
           onSuccess={handleBookingSuccess}
+        />
+      )}
+      
+      {/* Receipt Modal */}
+      {showReceiptModal && receiptData && (
+        <Receipt 
+          paymentData={receiptData}
+          onClose={() => setShowReceiptModal(false)}
         />
       )}
     </div>

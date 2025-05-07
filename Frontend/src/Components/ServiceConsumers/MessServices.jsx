@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { FaMapMarkerAlt, FaRupeeSign, FaUtensils, FaLeaf, FaDrumstickBite, FaClock, FaSpinner, FaCheckCircle, FaCreditCard } from 'react-icons/fa';
 import MessDetail from './MessDetail';
 import BookingModal from './BookingModal';
-import { fetchMessServices, checkServiceBookingStatus, updatePaymentStatus } from '../../utils/api';
+import Receipt from './Receipt';
+import { fetchMessServices, checkServiceBookingStatus, updatePaymentStatus, getUserDetails } from '../../utils/api';
+import { initiateRazorpayPayment } from '../../utils/razorpay';
 import { toast } from 'react-toastify';
 
 export default function MessServices() {
@@ -14,6 +16,9 @@ export default function MessServices() {
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingMess, setBookingMess] = useState(null);
   const [bookingStatuses, setBookingStatuses] = useState({});
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
     const getMessServices = async () => {
@@ -43,7 +48,19 @@ export default function MessServices() {
       }
     };
 
+    const loadUserProfile = async () => {
+      try {
+        const userData = await getUserDetails();
+        if (userData && userData.data) {
+          setUserProfile(userData.data);
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+
     getMessServices();
+    loadUserProfile();
   }, []);
 
   // Function to get meal type icon
@@ -82,13 +99,84 @@ export default function MessServices() {
     setShowBookingModal(true);
   };
 
-  // Handle payment button click
-  const handlePayNow = (messId) => {
-    // Show notification about payment implementation coming soon
-    toast.info('Payment functionality will be implemented in a future update.');
-    
-    // Don't update payment status - this will be implemented later
-    console.log('Pay Now button clicked for mess ID:', messId);
+  // Handle payment for a mess service
+  const handlePayNow = async (messId) => {
+    try {
+      setLoading(true);
+      const mess = messServices.find(mess => mess._id === messId);
+      if (!mess) {
+        toast.error('Mess service not found');
+        setLoading(false);
+        return;
+      }
+
+      const status = bookingStatuses[messId];
+      if (!status || !status.hasBooking || !status.booking) {
+        toast.error('No active subscription found');
+        setLoading(false);
+        return;
+      }
+
+      const booking = status.booking;
+      
+      // Prepare payment data for Razorpay
+      const paymentData = {
+        bookingId: booking._id,
+        amount: mess.monthlyPrice,
+        serviceType: 'mess',
+        serviceName: mess.messName,
+        userName: userProfile?.name || userProfile?.username || 'User',
+        userEmail: userProfile?.email || '',
+        userPhone: userProfile?.phone || '',
+        serviceId: mess._id
+      };
+      
+      // Handle successful payment
+      const onPaymentSuccess = async (response) => {
+        try {
+          // Refresh booking status from the server
+          const freshStatus = await checkServiceBookingStatus('mess', mess._id);
+          
+          // Update booking statuses
+          setBookingStatuses(prev => ({
+            ...prev,
+            [mess._id]: freshStatus
+          }));
+          
+          // Prepare receipt data
+          const receiptData = {
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+            paymentDate: new Date(),
+            paymentMethod: 'Razorpay',
+            amount: mess.monthlyPrice,
+            customerName: userProfile?.name || userProfile?.username || 'User',
+            customerEmail: userProfile?.email || '',
+            serviceName: mess.messName,
+            serviceType: 'mess',
+            duration: booking.bookingDetails?.duration || '1 month',
+            receiptNumber: freshStatus.booking?.receiptNumber || `RCP-${Date.now().toString().slice(-8)}`
+          };
+          
+          // Show receipt
+          setReceiptData(receiptData);
+          setShowReceiptModal(true);
+        } catch (error) {
+          console.error('Error processing payment success:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      // Initialize Razorpay payment
+      await initiateRazorpayPayment(paymentData, onPaymentSuccess);
+      
+    } catch (error) {
+      console.error('Payment error:', error);
+      toast.error('Failed to process payment. Please try again.');
+      setLoading(false);
+    }
   };
 
   // Get subscription button text and class based on availability and booking status
@@ -282,6 +370,7 @@ export default function MessServices() {
           onClose={handleCloseDetail}
           bookingStatus={bookingStatuses[selectedMess._id]}
           onBookingSuccess={handleSubscriptionSuccess}
+          onPayment={handlePayNow}
         />
       )}
 
@@ -292,6 +381,14 @@ export default function MessServices() {
           serviceType="mess"
           onClose={() => setShowBookingModal(false)}
           onSuccess={handleSubscriptionSuccess}
+        />
+      )}
+      
+      {/* Receipt Modal */}
+      {showReceiptModal && receiptData && (
+        <Receipt 
+          paymentData={receiptData}
+          onClose={() => setShowReceiptModal(false)}
         />
       )}
     </div>

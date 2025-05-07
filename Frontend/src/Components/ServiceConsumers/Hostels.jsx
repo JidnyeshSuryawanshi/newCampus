@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { FaMapMarkerAlt, FaRupeeSign, FaBed, FaWifi, FaSnowflake, FaTv, FaParking, FaShieldAlt, FaUtensils, FaBroom, FaTint, FaBoxOpen, FaTshirt, FaSpinner, FaCreditCard, FaCheckCircle } from 'react-icons/fa';
 import HostelDetail from './HostelDetail';
 import BookingModal from './BookingModal';
-import { fetchHostels, checkServiceBookingStatus } from '../../utils/api';
+import Receipt from './Receipt';
+import { fetchHostels, checkServiceBookingStatus, getUserDetails } from '../../utils/api';
+import { initiateRazorpayPayment } from '../../utils/razorpay';
 import { toast } from 'react-toastify';
 
 export default function Hostels() {
@@ -13,6 +15,9 @@ export default function Hostels() {
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingHostel, setBookingHostel] = useState(null);
   const [bookingStatuses, setBookingStatuses] = useState({}); // To store booking statuses for each hostel
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -39,7 +44,19 @@ export default function Hostels() {
       }
     };
 
+    const loadUserProfile = async () => {
+      try {
+        const userData = await getUserDetails();
+        if (userData && userData.data) {
+          setUserProfile(userData.data);
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+
     fetchData();
+    loadUserProfile();
   }, []);
 
   // Function to display amenities icons
@@ -96,10 +113,84 @@ export default function Hostels() {
     setShowBookingModal(true);
   };
 
-  // Handle payment button click
-  const handlePayNow = (hostelId) => {
-    // For now, just show a toast message
-    toast.info('Payment functionality will be implemented in a future update. Your booking is confirmed!');
+  // Handle payment for a hostel
+  const handlePayNow = async (hostelId) => {
+    try {
+      setLoading(true);
+      const hostel = hostels.find(hostel => hostel._id === hostelId);
+      if (!hostel) {
+        toast.error('Hostel not found');
+        setLoading(false);
+        return;
+      }
+
+      const status = bookingStatuses[hostelId];
+      if (!status || !status.hasBooking || !status.booking) {
+        toast.error('No active booking found');
+        setLoading(false);
+        return;
+      }
+
+      const booking = status.booking;
+      
+      // Prepare payment data for Razorpay
+      const paymentData = {
+        bookingId: booking._id,
+        amount: hostel.price,
+        serviceType: 'hostel',
+        serviceName: hostel.roomName,
+        userName: userProfile?.name || userProfile?.username || 'User',
+        userEmail: userProfile?.email || '',
+        userPhone: userProfile?.phone || '',
+        serviceId: hostel._id
+      };
+      
+      // Handle successful payment
+      const onPaymentSuccess = async (response) => {
+        try {
+          // Refresh booking status from the server
+          const freshStatus = await checkServiceBookingStatus('hostel', hostel._id);
+          
+          // Update booking statuses
+          setBookingStatuses(prev => ({
+            ...prev,
+            [hostel._id]: freshStatus
+          }));
+          
+          // Prepare receipt data
+          const receiptData = {
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+            paymentDate: new Date(),
+            paymentMethod: 'Razorpay',
+            amount: hostel.price,
+            customerName: userProfile?.name || userProfile?.username || 'User',
+            customerEmail: userProfile?.email || '',
+            serviceName: hostel.roomName,
+            serviceType: 'hostel',
+            duration: booking.bookingDetails?.duration || '1 month',
+            receiptNumber: freshStatus.booking?.receiptNumber || `RCP-${Date.now().toString().slice(-8)}`
+          };
+          
+          // Show receipt
+          setReceiptData(receiptData);
+          setShowReceiptModal(true);
+        } catch (error) {
+          console.error('Error processing payment success:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      // Initialize Razorpay payment
+      await initiateRazorpayPayment(paymentData, onPaymentSuccess);
+      
+    } catch (error) {
+      console.error('Payment error:', error);
+      toast.error('Failed to process payment. Please try again.');
+      setLoading(false);
+    }
   };
 
   // Get booking button text and class based on availability and booking status
@@ -305,6 +396,7 @@ export default function Hostels() {
           onClose={handleCloseDetails} 
           bookingStatus={bookingStatuses[selectedHostel._id]}
           onBookingSuccess={handleBookingSuccess}
+          onPayment={handlePayNow}
         />
       )}
 
@@ -315,6 +407,14 @@ export default function Hostels() {
           serviceType="hostel"
           onClose={() => setShowBookingModal(false)}
           onSuccess={handleBookingSuccess}
+        />
+      )}
+      
+      {/* Receipt Modal */}
+      {showReceiptModal && receiptData && (
+        <Receipt 
+          paymentData={receiptData}
+          onClose={() => setShowReceiptModal(false)}
         />
       )}
     </div>
