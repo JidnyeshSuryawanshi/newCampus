@@ -40,6 +40,7 @@ import ProtectedRoute from "./Components/protected/ProtectedRoute";
 import Hostels from "./Components/ServiceConsumers/Hostels.jsx";
 import MessServices from "./Components/ServiceConsumers/MessServices.jsx";
 import Gym from "./Components/ServiceConsumers/Gym.jsx";
+import MyBookings from "./Components/ServiceConsumers/MyBookings.jsx";
 
 export const router = createBrowserRouter([
   {
@@ -103,6 +104,10 @@ export const router = createBrowserRouter([
       {
         path: "gym",
         element: <Gym />
+      },
+      {
+        path: "my-bookings",
+        element: <MyBookings />
       },
       {
         path: "profile",

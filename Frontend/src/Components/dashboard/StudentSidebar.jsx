@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { FaHome, FaBook, FaUtensils, FaDumbbell, FaUser, FaSignOutAlt, FaTimes } from 'react-icons/fa';
+import { FaHome, FaBook, FaUtensils, FaDumbbell, FaUser, FaSignOutAlt, FaTimes, FaCalendarCheck } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 
 export default function StudentSidebar() {
@@ -17,6 +17,7 @@ export default function StudentSidebar() {
     { to: "/dashboard/hostels", icon: FaBook, label: "Hostels" },
     { to: "/dashboard/mess", icon: FaUtensils, label: "Mess Services" },
     { to: "/dashboard/gym", icon: FaDumbbell, label: "Gym" },
+    { to: "/dashboard/my-bookings", icon: FaCalendarCheck, label: "My Bookings" },
     { to: "/dashboard/profile", icon: FaUser, label: "Profile" },
   ];
 

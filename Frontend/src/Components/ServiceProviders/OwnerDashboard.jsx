@@ -103,22 +103,14 @@ export default function OwnerDashboard() {
               description += ` · ${durationText}`;
             }
             
-            // Determine status based on payment status from the booking
-            const isPaid = transaction.paid || false;
-            const status = isPaid ? "Active" : "Pending Payment";
-            const statusColor = isPaid ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800";
+            // Remove status information entirely
             
             return {
               title: transaction.student?.username || 'Unknown User',
               subtitle: transaction.student?.email || '',
               time: `Booked on ${formattedDate}`,
-              status: status,
-              statusColor: statusColor,
-              description: description,
-              value: `₹${transaction.amount.toLocaleString('en-IN')}`,
-              valueCaption: transaction.monthlyPrice 
-                ? `₹${transaction.monthlyPrice.toLocaleString('en-IN')}/month × ${transaction.duration || 1}`
-                : ''
+              description: description
+              // No status or statusColor fields
             };
           });
         

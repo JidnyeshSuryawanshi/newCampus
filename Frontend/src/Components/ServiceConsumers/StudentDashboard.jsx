@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaHome, FaUtensils, FaDumbbell, FaUserCircle, FaArrowRight, FaSpinner } from 'react-icons/fa';
+import { FaHome, FaUtensils, FaDumbbell, FaUserCircle, FaArrowRight, FaSpinner, FaCalendarCheck } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import api from '../../utils/api';
 
@@ -129,14 +129,23 @@ export default function StudentDashboard() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Active Bookings Section */}
-        <div className="mt-8 bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-medium text-gray-900">Active Bookings</h3>
-            <div className="mt-4">
-              <p className="text-gray-500">No active bookings found.</p>
+          
+          {/* My Bookings Card */}
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <div className="flex items-center">
+                <FaCalendarCheck className="text-3xl text-green-500" />
+                <h3 className="ml-3 text-lg font-medium text-gray-900">My Bookings</h3>
+              </div>
+              <div className="mt-4">
+                <p className="text-sm text-gray-500">Manage all your active bookings</p>
+                <button 
+                  onClick={() => navigate('/dashboard/my-bookings')}
+                  className="mt-4 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                >
+                  View My Bookings
+                </button>
+              </div>
             </div>
           </div>
         </div>
