@@ -28,11 +28,15 @@ const bookingSchema = new mongoose.Schema({
         return this.serviceType === 'hostel';
       }, 'Check-in date is required for hostel bookings']
     },
+    startDate: {
+      type: Date,
+      required: [function() {
+        return this.serviceType === 'mess';
+      }, 'Start date is required for mess subscriptions']
+    },
     duration: {
       type: String,
-      required: [function() {
-        return this.serviceType === 'hostel';
-      }, 'Duration is required for hostel bookings']
+      required: [true, 'Duration is required for all bookings']
     },
     additionalRequirements: {
       type: String,

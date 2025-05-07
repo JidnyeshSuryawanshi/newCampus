@@ -370,13 +370,48 @@ export const getRevenueStats = async () => {
     
     // Process each paid booking
     paidBookings.forEach(booking => {
-      // Get price from serviceDetails
-      const price = booking.serviceDetails?.price || 0;
-      totalRevenue += price;
+      // Get price based on service type
+      let monthlyPrice = 0;
+      
+      if (booking.serviceType === 'hostel') {
+        monthlyPrice = booking.serviceDetails?.price || 0;
+      } else if (booking.serviceType === 'mess') {
+        monthlyPrice = booking.serviceDetails?.monthlyPrice || 0;
+      } else {
+        // Default fallback
+        monthlyPrice = booking.serviceDetails?.price || 0;
+      }
+      
+      // Calculate total amount based on duration
+      let totalPrice = monthlyPrice;
+      let durationInMonths = 1; // Default to 1 month
+      
+      if (booking.bookingDetails?.duration) {
+        // Convert duration to months if specified in years
+        const durationStr = booking.bookingDetails.duration.toString().toLowerCase();
+        
+        if (durationStr.includes('year') || durationStr.includes('yr')) {
+          // Extract the number from the string
+          const yearMatch = durationStr.match(/(\d+)/);
+          const years = yearMatch ? parseInt(yearMatch[1]) : 1;
+          durationInMonths = years * 12;
+        } else if (durationStr.includes('month') || durationStr.includes('mo')) {
+          // Extract the number from the string
+          const monthMatch = durationStr.match(/(\d+)/);
+          durationInMonths = monthMatch ? parseInt(monthMatch[1]) : 1;
+        } else {
+          // Try to parse as a simple number (default to months)
+          durationInMonths = parseInt(durationStr) || 1;
+        }
+        
+        totalPrice = monthlyPrice * durationInMonths;
+      }
+      
+      totalRevenue += totalPrice;
       
       // Add to service type revenue
       if (booking.serviceType && serviceTypeRevenue[booking.serviceType] !== undefined) {
-        serviceTypeRevenue[booking.serviceType] += price;
+        serviceTypeRevenue[booking.serviceType] += totalPrice;
       }
       
       // Add to monthly revenue
@@ -384,7 +419,7 @@ export const getRevenueStats = async () => {
       const monthYear = `${bookingDate.getFullYear()}-${bookingDate.getMonth() + 1}`;
       
       if (monthlyRevenue[monthYear] !== undefined) {
-        monthlyRevenue[monthYear] += price;
+        monthlyRevenue[monthYear] += totalPrice;
       }
     });
     
@@ -400,19 +435,67 @@ export const getRevenueStats = async () => {
       };
     }).reverse();
     
+    // Map all paid bookings to a consistent format for displaying in tables
+    const formattedBookings = paidBookings.map(booking => {
+      // Extract and convert duration
+      let durationInMonths = 1; // Default to 1 month
+      
+      if (booking.bookingDetails?.duration) {
+        const durationStr = booking.bookingDetails.duration.toString().toLowerCase();
+        
+        if (durationStr.includes('year') || durationStr.includes('yr')) {
+          // Extract the number from the string
+          const yearMatch = durationStr.match(/(\d+)/);
+          const years = yearMatch ? parseInt(yearMatch[1]) : 1;
+          durationInMonths = years * 12;
+        } else if (durationStr.includes('month') || durationStr.includes('mo')) {
+          // Extract the number from the string
+          const monthMatch = durationStr.match(/(\d+)/);
+          durationInMonths = monthMatch ? parseInt(monthMatch[1]) : 1;
+        } else {
+          // Try to parse as a simple number (default to months)
+          durationInMonths = parseInt(durationStr) || 1;
+        }
+      }
+      
+      // Get price based on service type
+      let monthlyPrice = 0;
+      let serviceName = 'Service';
+      
+      if (booking.serviceType === 'hostel') {
+        monthlyPrice = booking.serviceDetails?.price || 0;
+        serviceName = booking.serviceDetails?.roomName || 'Room';
+      } else if (booking.serviceType === 'mess') {
+        monthlyPrice = booking.serviceDetails?.monthlyPrice || 0;
+        serviceName = booking.serviceDetails?.messName || 'Mess';
+      } else {
+        // Default fallback
+        monthlyPrice = booking.serviceDetails?.price || 0;
+      }
+      
+      // Calculate total amount
+      const totalAmount = monthlyPrice * durationInMonths;
+        
+      return {
+        id: booking._id,
+        date: booking.updatedAt,
+        amount: totalAmount,
+        monthlyPrice: monthlyPrice,
+        student: booking.student,
+        serviceType: booking.serviceType,
+        serviceName: serviceName,
+        duration: durationInMonths,
+        originalDuration: booking.bookingDetails?.duration || null
+      };
+    });
+    
     return {
       totalRevenue,
       paidBookingsCount: paidBookings.length,
       monthlyData,
       serviceTypeRevenue,
-      recentTransactions: paidBookings.slice(0, 5).map(booking => ({
-        id: booking._id,
-        date: booking.updatedAt,
-        amount: booking.serviceDetails?.price || 0,
-        student: booking.student,
-        serviceType: booking.serviceType,
-        serviceName: booking.serviceDetails?.roomName || 'Service'
-      }))
+      allBookings: formattedBookings,
+      recentTransactions: formattedBookings.slice(0, 5)
     };
   } catch (error) {
     console.error('Error calculating revenue stats:', error);

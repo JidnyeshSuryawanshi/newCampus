@@ -1,5 +1,6 @@
 const Booking = require('../Models/booking');
 const HostelRoom = require('../Models/hostelRoom');
+const Mess = require('../Models/mess');
 const User = require('../Models/user');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
@@ -21,8 +22,7 @@ exports.createBooking = asyncHandler(async (req, res, next) => {
     if (serviceType === 'hostel') {
       serviceModel = HostelRoom;
     } else if (serviceType === 'mess') {
-      // Add mess model when implemented
-      return next(new ErrorResponse('Mess bookings are not implemented yet', 400));
+      serviceModel = Mess;
     } else if (serviceType === 'gym') {
       // Add gym model when implemented
       return next(new ErrorResponse('Gym bookings are not implemented yet', 400));
@@ -119,7 +119,26 @@ exports.getBookings = asyncHandler(async (req, res, next) => {
           console.error(`Error fetching hostel room details: ${err.message}`);
         }
       }
-      // Add other service types when implemented (mess, gym)
+      else if (booking.serviceType === 'mess') {
+        try {
+          const mess = await Mess.findById(booking.serviceId);
+          if (mess) {
+            bookingObj.serviceDetails = {
+              messName: mess.messName,
+              monthlyPrice: mess.monthlyPrice,
+              dailyPrice: mess.dailyPrice,
+              address: mess.address,
+              messType: mess.messType,
+              capacity: mess.capacity,
+              images: mess.images,
+              openingHours: mess.openingHours
+            };
+          }
+        } catch (err) {
+          console.error(`Error fetching mess details: ${err.message}`);
+        }
+      }
+      // Add other service types when implemented (gym)
       
       populatedBookings.push(bookingObj);
     }
@@ -182,7 +201,26 @@ exports.getBooking = asyncHandler(async (req, res, next) => {
         console.error(`Error fetching hostel room details: ${err.message}`);
       }
     }
-    // Add other service types when implemented (mess, gym)
+    else if (booking.serviceType === 'mess') {
+      try {
+        const mess = await Mess.findById(booking.serviceId);
+        if (mess) {
+          bookingObj.serviceDetails = {
+            messName: mess.messName,
+            monthlyPrice: mess.monthlyPrice,
+            dailyPrice: mess.dailyPrice,
+            address: mess.address,
+            messType: mess.messType,
+            capacity: mess.capacity,
+            images: mess.images,
+            openingHours: mess.openingHours
+          };
+        }
+      } catch (err) {
+        console.error(`Error fetching mess details: ${err.message}`);
+      }
+    }
+    // Add other service types when implemented (gym)
 
     res.status(200).json({
       success: true,

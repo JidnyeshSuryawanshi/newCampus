@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { FaCalendarAlt, FaHourglass, FaSpinner, FaRegStickyNote, FaTimes } from 'react-icons/fa';
+import { FaCalendarAlt, FaHourglass, FaSpinner, FaRegStickyNote, FaTimes, FaUtensils } from 'react-icons/fa';
 import { createBookingRequest } from '../../utils/api';
 import { toast } from 'react-toastify';
 
 export default function BookingModal({ service, serviceType, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     checkInDate: '',
-    duration: '1 month',
+    duration: serviceType === 'hostel' ? '1 month' : '1 month',
     additionalRequirements: ''
   });
   const [loading, setLoading] = useState(false);
@@ -24,7 +24,7 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
     e.preventDefault();
     
     // Validate form
-    if (!formData.checkInDate) {
+    if (serviceType === 'hostel' && !formData.checkInDate) {
       setError('Please select a check-in date');
       return;
     }
@@ -34,11 +34,18 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
       serviceType,
       serviceId: service._id,
       bookingDetails: {
-        checkInDate: formData.checkInDate,
-        duration: formData.duration,
         additionalRequirements: formData.additionalRequirements
       }
     };
+
+    // Add specific details based on service type
+    if (serviceType === 'hostel') {
+      bookingData.bookingDetails.checkInDate = formData.checkInDate;
+      bookingData.bookingDetails.duration = formData.duration;
+    } else if (serviceType === 'mess') {
+      bookingData.bookingDetails.startDate = new Date().toISOString();
+      bookingData.bookingDetails.duration = formData.duration;
+    }
 
     try {
       setLoading(true);
@@ -48,7 +55,11 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
       const response = await createBookingRequest(bookingData);
       
       // Show success notification
-      toast.success('Booking request sent successfully!');
+      if (serviceType === 'hostel') {
+        toast.success('Booking request sent successfully!');
+      } else if (serviceType === 'mess') {
+        toast.success('Subscription request sent successfully!');
+      }
       
       // Close modal and refresh data
       if (onSuccess) {
@@ -58,7 +69,10 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
       
     } catch (error) {
       console.error('Error creating booking:', error);
-      setError(error.response?.data?.error || 'Failed to create booking request');
+      const errorMessage = serviceType === 'mess' 
+        ? 'Failed to create subscription request' 
+        : 'Failed to create booking request';
+      setError(error.response?.data?.error || errorMessage);
     } finally {
       setLoading(false);
     }
@@ -68,6 +82,26 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
   const getMinDate = () => {
     const today = new Date();
     return today.toISOString().split('T')[0];
+  };
+
+  // Get service name
+  const getServiceName = () => {
+    if (serviceType === 'hostel') {
+      return service.roomName || 'Room';
+    } else if (serviceType === 'mess') {
+      return service.messName || 'Mess';
+    }
+    return service.title || 'Service';
+  };
+
+  // Get modal title
+  const getModalTitle = () => {
+    if (serviceType === 'hostel') {
+      return `Book ${getServiceName()}`;
+    } else if (serviceType === 'mess') {
+      return `Subscribe to ${getServiceName()}`;
+    }
+    return `Book ${getServiceName()}`;
   };
 
   return (
@@ -81,7 +115,9 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
           <FaTimes />
         </button>
         
-        <h2 className="text-xl font-bold text-green-600 mb-4">Book {service.roomName || service.title}</h2>
+        <h2 className={`text-xl font-bold mb-4 ${serviceType === 'mess' ? 'text-green-600' : 'text-green-600'}`}>
+          {getModalTitle()}
+        </h2>
         
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4 text-sm">
@@ -90,28 +126,34 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
         )}
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Check-in Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-              <FaCalendarAlt className="mr-2 text-green-600" />
-              Check-in Date
-            </label>
-            <input
-              type="date"
-              name="checkInDate"
-              value={formData.checkInDate}
-              onChange={handleChange}
-              min={getMinDate()}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              required
-            />
-          </div>
+          {/* Check-in Date - only for hostel */}
+          {serviceType === 'hostel' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <FaCalendarAlt className="mr-2 text-green-600" />
+                Check-in Date
+              </label>
+              <input
+                type="date"
+                name="checkInDate"
+                value={formData.checkInDate}
+                onChange={handleChange}
+                min={getMinDate()}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                required
+              />
+            </div>
+          )}
           
           {/* Duration */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-              <FaHourglass className="mr-2 text-green-600" />
-              Duration
+              {serviceType === 'mess' ? (
+                <FaUtensils className="mr-2 text-green-600" />
+              ) : (
+                <FaHourglass className="mr-2 text-green-600" />
+              )}
+              Subscription Duration
             </label>
             <select
               name="duration"
@@ -130,7 +172,7 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
               <FaRegStickyNote className="mr-2 text-green-600" />
-              Additional Requirements (optional)
+              {serviceType === 'mess' ? 'Special Diet Requirements (optional)' : 'Additional Requirements (optional)'}
             </label>
             <textarea
               name="additionalRequirements"
@@ -138,7 +180,7 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
               onChange={handleChange}
               rows="3"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder="Any special requests or requirements..."
+              placeholder={serviceType === 'mess' ? 'Any diet restrictions or preferences...' : 'Any special requests or requirements...'}
             ></textarea>
           </div>
           
@@ -154,7 +196,7 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center"
+              className={`px-4 py-2 text-white rounded-md flex items-center ${serviceType === 'mess' ? 'bg-green-600 hover:bg-green-700' : 'bg-green-600 hover:bg-green-700'}`}
             >
               {loading ? (
                 <>
@@ -162,7 +204,7 @@ export default function BookingModal({ service, serviceType, onClose, onSuccess 
                   Sending...
                 </>
               ) : (
-                'Send Request'
+                serviceType === 'mess' ? 'Subscribe Now' : 'Send Request'
               )}
             </button>
           </div>
