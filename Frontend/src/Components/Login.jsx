@@ -11,6 +11,7 @@ export default function Login() {
         email: "",
         password: "",
     })
+    const [loading, setLoading] = useState(false)
 
     const handleChange = (e) => {
         setFormData({
@@ -21,6 +22,7 @@ export default function Login() {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
+        setLoading(true)
 
         try {
             const response = await fetch(
@@ -37,10 +39,8 @@ export default function Login() {
             const data = await response.json()
 
             if (data.success) {
-                login({
-                    ...data.user,
-                    token: data.token,
-                })
+                // User is verified and login successful
+                login(data.token, data.user)
                 toast.success("Login successful!")
 
                 switch (data.user.userType) {
@@ -55,12 +55,21 @@ export default function Login() {
                     default:
                         toast.error("Invalid user type")
                 }
+            } else if (data.requiresVerification) {
+                // User needs to verify their email
+                toast.warning("Please verify your email before logging in")
+                // Store email verification data
+                login(data.token, data.user)
+                // Redirect to verification page
+                navigate("/verify-email")
             } else {
                 toast.error(data.error || "Login failed")
             }
         } catch (error) {
             console.error("Login error:", error)
             toast.error("Something went wrong. Please try again.")
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -161,9 +170,10 @@ export default function Login() {
 
                         <button
                             type="submit"
-                            className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition duration-200 font-semibold"
+                            disabled={loading}
+                            className={`w-full ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white py-3 rounded-lg transition duration-200 font-semibold`}
                         >
-                            Sign In
+                            {loading ? 'Signing In...' : 'Sign In'}
                         </button>
 
                         <div className="text-center mt-6">

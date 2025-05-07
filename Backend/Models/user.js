@@ -31,6 +31,18 @@ const userSchema = new mongoose.Schema({
       message: 'Please select a valid user type'
     }
   },
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  verificationOTP: {
+    type: String,
+    select: false
+  },
+  otpExpires: {
+    type: Date,
+    select: false
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -56,6 +68,30 @@ userSchema.methods.getSignedJwtToken = function() {
 // Match password
 userSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// Generate OTP
+userSchema.methods.generateOTP = function() {
+  // Generate a random 6-digit OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  // Hash the OTP and set expiration (10 minutes from now)
+  const salt = bcrypt.genSaltSync(10);
+  this.verificationOTP = bcrypt.hashSync(otp, salt);
+  this.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  
+  return otp;
+};
+
+// Verify OTP
+userSchema.methods.verifyOTP = async function(otp) {
+  // Check if OTP has expired
+  if (this.otpExpires < Date.now()) {
+    return false;
+  }
+  
+  // Compare the OTP
+  return await bcrypt.compare(otp, this.verificationOTP);
 };
 
 module.exports = mongoose.model('User', userSchema);

@@ -2,15 +2,18 @@ import React, { useState } from "react";
 import { FaUser, FaEnvelope, FaLock, FaUserTag } from "react-icons/fa";
 import { Link, useNavigate } from "react-router-dom";
 import toast, { Toaster } from "react-hot-toast";
+import { useAuth } from "../context/AuthContext";
 
 export default function Register() {
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [formData, setFormData] = useState({
         username: "",
         email: "",
         password: "",
         userType: "",
     });
+    const [loading, setLoading] = useState(false);
 
     const handleChange = (e) => {
         setFormData({
@@ -21,6 +24,7 @@ export default function Register() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setLoading(true);
 
         try {
             const response = await fetch(
@@ -37,15 +41,24 @@ export default function Register() {
             const data = await response.json();
 
             if (data.success) {
-                toast.success("Registration successful! Redirecting to login...");
+                // Store the token and user data
+                localStorage.setItem('token', data.token);
+                
+                // Use the login function from AuthContext to set pending verification
+                login(data.token, data.user);
+                
+                toast.success("Registration successful! Redirecting to verification page...");
                 setTimeout(() => {
-                    navigate("/login");
+                    navigate("/verify-email");
                 }, 2000);
             } else {
                 toast.error(data.error || "Registration failed");
             }
         } catch (error) {
+            console.error("Registration error:", error);
             toast.error("Server error. Please try again.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -133,9 +146,10 @@ export default function Register() {
 
                     <button
                         type="submit"
-                        className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold text-lg py-4 rounded-lg transition duration-300 mt-6"
+                        disabled={loading}
+                        className={`w-full ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white font-semibold text-lg py-4 rounded-lg transition duration-300 mt-6`}
                     >
-                        Register
+                        {loading ? 'Registering...' : 'Register'}
                     </button>
 
                     <div className="text-center mt-8 text-gray-500">

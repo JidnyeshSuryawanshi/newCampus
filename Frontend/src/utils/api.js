@@ -630,4 +630,25 @@ export const removeCustomer = async (bookingId) => {
   }
 };
 
+// Verification related functions
+export const verifyEmail = async (data) => {
+  try {
+    const response = await api.post('/auth/verify-email', data);
+    return response.data;
+  } catch (error) {
+    console.error('Email verification error:', error);
+    throw error;
+  }
+};
+
+export const resendOTP = async (data) => {
+  try {
+    const response = await api.post('/auth/resend-otp', data);
+    return response.data;
+  } catch (error) {
+    console.error('Resend OTP error:', error);
+    throw error;
+  }
+};
+
 export default api;
